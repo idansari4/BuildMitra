@@ -1,0 +1,239 @@
+{
+  "app_name": "BuildMitra",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A highly legible, high-contrast, professional, and blue-collar-friendly utility platform prioritizing immediate readability, clear primary actions, and an Uber-like marketplace efficiency.",
+  "color": {
+    "light": {
+      "surface": "#FFFFFF",
+      "onSurface": "#18181B",
+      "surfaceSecondary": "#F4F4F5",
+      "onSurfaceSecondary": "#52525B",
+      "surfaceTertiary": "#E4E4E7",
+      "onSurfaceTertiary": "#3F3F46",
+      "surfaceInverse": "#18181B",
+      "onSurfaceInverse": "#FFFFFF",
+      "brand": "#F59E0B",
+      "brandPrimary": "#F59E0B",
+      "onBrandPrimary": "#18181B",
+      "brandSecondary": "#FDE68A",
+      "onBrandSecondary": "#92400E",
+      "brandTertiary": "#FEF3C7",
+      "onBrandTertiary": "#B45309",
+      "success": "#16A34A",
+      "onSuccess": "#FFFFFF",
+      "warning": "#D97706",
+      "onWarning": "#FFFFFF",
+      "error": "#DC2626",
+      "onError": "#FFFFFF",
+      "border": "#E4E4E7",
+      "borderStrong": "#A1A1AA",
+      "divider": "#F4F4F5",
+      "pressed": "rgba(24, 24, 27, 0.05)",
+      "disabled": "rgba(24, 24, 27, 0.3)"
+    },
+    "dark": {
+      "surface": "#09090B",
+      "onSurface": "#FAFAFA",
+      "surfaceSecondary": "#18181B",
+      "onSurfaceSecondary": "#A1A1AA",
+      "surfaceTertiary": "#27272A",
+      "onSurfaceTertiary": "#D4D4D8",
+      "surfaceInverse": "#FAFAFA",
+      "onSurfaceInverse": "#18181B",
+      "brand": "#F59E0B",
+      "brandPrimary": "#F59E0B",
+      "onBrandPrimary": "#18181B",
+      "brandSecondary": "#D97706",
+      "onBrandSecondary": "#FEF3C7",
+      "brandTertiary": "#78350F",
+      "onBrandTertiary": "#FDE68A",
+      "success": "#22C55E",
+      "onSuccess": "#000000",
+      "warning": "#F59E0B",
+      "onWarning": "#000000",
+      "error": "#EF4444",
+      "onError": "#000000",
+      "border": "#27272A",
+      "borderStrong": "#52525B",
+      "divider": "#18181B",
+      "pressed": "rgba(250, 250, 250, 0.05)",
+      "disabled": "rgba(250, 250, 250, 0.3)"
+    }
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 13,
+      "base": 16,
+      "lg": 18,
+      "xl": 22,
+      "2xl": 28
+    }
+  },
+  "spacing": {
+    "rule": "Generous spacing. Use safe area at screen root. No dense dashboard packing; allow touch targets to be oversized (min 48pt for primary buttons). Cards fill row horizontally.",
+    "xs": 6,
+    "sm": 10,
+    "md": 16,
+    "lg": 24,
+    "xl": 32,
+    "2xl": 48,
+    "3xl": 64
+  },
+  "radius_tokens": {
+    "sm": 8,
+    "md": 14,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use glass on bottom tab bar",
+      "Use glass on sticky headers over scrolling job feeds",
+      "Use glass on floating bottom sheets (e.g., job application modal)"
+    ],
+    "dont's": [
+      "Do not use glass on regular list rows or job cards",
+      "Do not use glass on form inputs or empty states"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "haptics": {
+    "events": {
+      "primary_button_press": "impactMedium",
+      "tab_change": "impactLight",
+      "job_apply_success": "notificationSuccess",
+      "attendance_check_in": "notificationSuccess",
+      "role_select": "impactMedium"
+    }
+  },
+  "screens": [
+    {
+      "name": "Splash",
+      "purpose": "Brand presentation with a full-bleed construction site imagery.",
+      "states": {
+        "loading": "Shows logo centered over full-bleed site image with gradient bottom scrim.",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Full-bleed expo-image (site_hero). Vertical gradient scrim (transparent to surfaceInverse at 80% opacity) positioned bottom. App logo and 'India\\'s Construction Network' title at the bottom 20%, text styled as onSurfaceInverse."
+    },
+    {
+      "name": "Role Selection",
+      "purpose": "Allow user to identify as Worker, Contractor, or Client before signup.",
+      "states": {
+        "loading": "N/A",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Large headline at top. Three large vertical cards. Each card uses `surfaceSecondary`, a left-aligned icon in a `brandTertiary` tinted circle, bold title, and short description. A sticky 'Continue' CTA placed at the bottom inside a KeyboardAvoidingView/SafeArea."
+    },
+    {
+      "name": "Login/OTP",
+      "purpose": "Authenticate users securely using mobile number.",
+      "states": {
+        "loading": "Spinner in the CTA button.",
+        "empty": "N/A",
+        "error": "Red warning text below input field, shake animation if possible."
+      },
+      "layout": "Clean, distraction-free. Headline 'Enter Mobile Number'. Large, single-line text input with standard border. 'Send OTP' primary CTA anchored to the bottom (sticky thumb zone)."
+    },
+    {
+      "name": "Worker Home (Job Feed)",
+      "purpose": "Primary marketplace feed showing nearby jobs based on worker skills.",
+      "states": {
+        "loading": "Skeleton UI for job cards.",
+        "empty": "Illustration of binoculars + 'No jobs found nearby. Update your skills or location.' + 'Update Profile' CTA.",
+        "error": "Illustration + 'Unable to load jobs' + 'Retry' CTA."
+      },
+      "layout": "Top: Sticky header with search bar (magnifying glass) + location dropdown. Feed: Vertical scroll of Job Cards. Job Card: `surface` with subtle shadow/border, Contractor Logo/Initials (left), Job Title (bold, lg), Location pin + distance, Wage badge (Amber bg + black text). Bottom of card: 'Apply' button. Bottom Tab Bar is present."
+    },
+    {
+      "name": "Job Detail",
+      "purpose": "Deep dive into job requirements, expectations, and contractor details.",
+      "states": {
+        "loading": "Centered spinner.",
+        "empty": "N/A",
+        "error": "Centered text + 'Retry' CTA."
+      },
+      "layout": "Top hero section with contractor logo or site image (scrim). Content: Job Title, 'Posted 2h ago', horizontal scroll of skill chips (e.g. Mason, Plumber) in `surfaceSecondary` capsules. Details list. Sticky bottom container with glassmorphism + 'Apply for Job' full-width primary CTA."
+    },
+    {
+      "name": "Attendance (GPS + Selfie)",
+      "purpose": "Secure check-in for active jobs.",
+      "states": {
+        "loading": "Analyzing GPS/Face overlay.",
+        "empty": "N/A",
+        "error": "Out of geofence warning or face not detected."
+      },
+      "layout": "Instant action. Full-screen Camera overlay (expo-camera) taking 85% of screen. A face outline frame. Bottom 15% sheet containing Real-Time GPS data (Lat/Lng), Location Verification Status badge (Green/Red), and a large primary Check-in button."
+    },
+    {
+      "name": "Profile & Skills",
+      "purpose": "Allow workers to list their expertise and expected daily wage.",
+      "states": {
+        "loading": "Centered spinner.",
+        "empty": "N/A",
+        "error": "Error toast."
+      },
+      "layout": "Header with Avatar image picker. Form layout: Name, Mobile. Skills section: Multi-select grid of selectable chips (surfaceTertiary for unselected, brandSecondary for selected). Expected Wage input. Sticky 'Save' CTA."
+    },
+    {
+      "name": "Wallet / Referral",
+      "purpose": "Display gamified badges and referral earnings.",
+      "states": {
+        "loading": "Skeleton balances.",
+        "empty": "Zero balance state with 'Refer a friend' hero illustration.",
+        "error": "Retry CTA."
+      },
+      "layout": "Top: Gamified Hero card using brandPrimary gradient background. Shows Total Earnings in oversized text. Below: Badges section (Bronze/Silver/Gold icons). Below: Recent transactions list."
+    }
+  ],
+  "images": {
+    "site_hero": {
+      "url": "https://images.pexels.com/photos/4170184/pexels-photo-4170184.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Aerial view of active modern construction site with machinery"
+    },
+    "worker_hero": {
+      "url": "https://images.unsplash.com/photo-1697305592193-6a64a63a347e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwyfHxpbmRpYW4lMjBjb25zdHJ1Y3Rpb24lMjB3b3JrZXIlMjBidWlsZGVyJTIwc21pbGluZyUyMHBvcnRyYWl0fGVufDB8fHx8MTc4MjQwMjczMXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Indian construction worker portrait"
+    },
+    "masonry_skill": {
+      "url": "https://images.pexels.com/photos/11429199/pexels-photo-11429199.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Construction worker laying bricks"
+    },
+    "plumbing_skill": {
+      "url": "https://images.pexels.com/photos/6419128/pexels-photo-6419128.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Plumber installing steel pipes"
+    },
+    "electrical_skill": {
+      "url": "https://images.unsplash.com/photo-1758101755915-462eddc23f57?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDV8MHwxfHNlYXJjaHwzfHxlbGVjdHJpY2lhbiUyMHdvcmtpbmclMjB3aXJlcyUyMGNhYmxlc3xlbnwwfHx8fDE3ODE4OTI4NzR8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Electrician testing electrical panel"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the WCAG guidelines; since the target user base is blue-collar workers in India, ensure all fonts are properly sized (Base text at 16pt, titles at 22-28pt).",
+    "DO NOT use blue, indigo, or purple. Stick to the brand palette mapping provided (Amber primary against Charcoal black text/bg).",
+    "Implement the 'Sticky CTA' pattern meticulously. Actions like 'Verify OTP', 'Apply for Job', and 'Check In' MUST be anchored to the bottom using KeyboardAvoidingView with Safe Area considered.",
+    "For the Attendance feature, implement the camera layout directly as a full-screen view overlaid with GPS coordinates data at the bottom, just like human verification apps.",
+    "Job Feed cards must be built with structural clarity: salary and role highlighted as prominent 'badges', and Contractor logos mapped accurately. Use the provided real skill images as fallback or header backgrounds.",
+    "All full-bleed background images MUST use the 3-stop gradient scrim to guarantee text legibility.",
+    "Do not use generic emojis anywhere in the app interface."
+  ]
+}
