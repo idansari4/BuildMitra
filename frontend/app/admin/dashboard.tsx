@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
+import { useT } from "@/src/i18n";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card } from "@/src/ui";
 
@@ -17,6 +18,7 @@ type Stats = {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { t: tr } = useT();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,13 +41,13 @@ export default function Dashboard() {
         <LinearGradient colors={[colors.surfaceInverse, "#27272A"]} style={styles.hero}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Ionicons name="shield-checkmark" size={18} color={colors.brand} />
-            <Muted style={{ color: colors.surfaceTertiary, fontWeight: "700" }}>ADMIN CONSOLE</Muted>
+            <Muted style={{ color: colors.surfaceTertiary, fontWeight: "700" }}>{tr("admin.console")}</Muted>
           </View>
           <H1 style={{ color: colors.onSurfaceInverse, marginTop: 6 }} testID="admin-greeting">
-            Hi {user?.name?.split(" ")[0]}
+            {tr("home.hi")} {user?.name?.split(" ")[0]}
           </H1>
           <Muted style={{ color: colors.surfaceTertiary, marginTop: 4 }}>
-            Platform health at a glance
+            {tr("admin.healthSub")}
           </Muted>
         </LinearGradient>
 
@@ -53,23 +55,23 @@ export default function Dashboard() {
           <ActivityIndicator color={colors.brand} style={{ marginTop: 60 }} />
         ) : (
           <>
-            <H2>People</H2>
+            <H2>{tr("admin.section.people")}</H2>
             <View style={styles.grid}>
-              <KPI testID="kpi-workers" label="Workers" value={stats.total_workers} icon="hammer" color="#F59E0B" />
-              <KPI testID="kpi-contractors" label="Contractors" value={stats.total_contractors} icon="people" color="#3B82F6" />
-              <KPI testID="kpi-clients" label="Clients" value={stats.total_clients} icon="business" color="#10B981" />
-              <KPI testID="kpi-pending" label="Pending Verify" value={stats.pending_verifications} icon="time" color="#EF4444" />
+              <KPI testID="kpi-workers" label={tr("admin.kpi.workers")} value={stats.total_workers} icon="hammer" color="#F59E0B" />
+              <KPI testID="kpi-contractors" label={tr("admin.kpi.contractors")} value={stats.total_contractors} icon="people" color="#3B82F6" />
+              <KPI testID="kpi-clients" label={tr("admin.kpi.clients")} value={stats.total_clients} icon="business" color="#10B981" />
+              <KPI testID="kpi-pending" label={tr("admin.kpi.pending")} value={stats.pending_verifications} icon="time" color="#EF4444" />
             </View>
 
-            <H2>Jobs & Activity</H2>
+            <H2>{tr("admin.section.jobs")}</H2>
             <View style={styles.grid}>
-              <KPI testID="kpi-active-jobs" label="Active Jobs" value={stats.active_jobs} icon="briefcase" color="#F59E0B" />
-              <KPI testID="kpi-completed-jobs" label="Completed" value={stats.completed_jobs} icon="checkmark-done" color="#10B981" />
-              <KPI testID="kpi-applications" label="Applications" value={stats.total_applications} icon="document-text" color="#8B5CF6" />
-              <KPI testID="kpi-attendance" label="Today's Attendance" value={stats.daily_attendance} icon="finger-print" color="#0EA5E9" />
+              <KPI testID="kpi-active-jobs" label={tr("admin.kpi.activeJobs")} value={stats.active_jobs} icon="briefcase" color="#F59E0B" />
+              <KPI testID="kpi-completed-jobs" label={tr("admin.kpi.completed")} value={stats.completed_jobs} icon="checkmark-done" color="#10B981" />
+              <KPI testID="kpi-applications" label={tr("admin.kpi.applications")} value={stats.total_applications} icon="document-text" color="#8B5CF6" />
+              <KPI testID="kpi-attendance" label={tr("admin.kpi.todayAtt")} value={stats.daily_attendance} icon="finger-print" color="#0EA5E9" />
             </View>
 
-            <H2>Operations</H2>
+            <H2>{tr("admin.section.ops")}</H2>
             <Card>
               <View style={styles.row}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -77,8 +79,8 @@ export default function Dashboard() {
                     <Ionicons name="alert-circle" size={20} color="#DC2626" />
                   </View>
                   <View>
-                    <Body style={{ fontWeight: "700" }}>Open Complaints</Body>
-                    <Muted>Need attention</Muted>
+                    <Body style={{ fontWeight: "700" }}>{tr("admin.kpi.complaints")}</Body>
+                    <Muted>{tr("admin.kpi.complaintsSub")}</Muted>
                   </View>
                 </View>
                 <Body style={{ fontSize: t.xxl, fontWeight: "800", color: colors.error }} testID="kpi-complaints">
@@ -93,8 +95,8 @@ export default function Dashboard() {
                     <Ionicons name="wallet" size={20} color={colors.brand} />
                   </View>
                   <View>
-                    <Body style={{ fontWeight: "700" }}>Wallet Payouts</Body>
-                    <Muted>Total credited via referrals</Muted>
+                    <Body style={{ fontWeight: "700" }}>{tr("admin.kpi.payouts")}</Body>
+                    <Muted>{tr("admin.kpi.payoutsSub")}</Muted>
                   </View>
                 </View>
                 <Body style={{ fontSize: t.xl, fontWeight: "800", color: colors.brand }} testID="kpi-payouts">

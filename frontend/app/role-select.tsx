@@ -3,24 +3,26 @@ import { View, StyleSheet, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useT } from "@/src/i18n";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { H1, Body, Muted, PrimaryButton } from "@/src/ui";
 
-const ROLES = [
-  { id: "worker", icon: "hammer-outline", title: "I am a Worker", desc: "Find daily-wage construction jobs near you" },
-  { id: "contractor", icon: "people-outline", title: "I am a Contractor", desc: "Manage your team, bid on projects" },
-  { id: "client", icon: "business-outline", title: "I am a Client", desc: "Hire workers or contractor teams" },
-] as const;
-
 export default function RoleSelect() {
   const router = useRouter();
+  const { t } = useT();
   const [selected, setSelected] = useState<string>("worker");
+
+  const ROLES = [
+    { id: "worker", icon: "hammer-outline", title: t("role.worker"), desc: t("role.worker.desc") },
+    { id: "contractor", icon: "people-outline", title: t("role.contractor"), desc: t("role.contractor.desc") },
+    { id: "client", icon: "business-outline", title: t("role.client"), desc: t("role.client.desc") },
+  ] as const;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl + 80 }}>
-        <H1>Welcome to BuildMitra</H1>
-        <Muted style={{ marginTop: 6, fontSize: type.base }}>Tell us who you are to get started</Muted>
+        <H1>{t("role.title")}</H1>
+        <Muted style={{ marginTop: 6, fontSize: type.base }}>{t("role.subtitle")}</Muted>
 
         <View style={{ marginTop: spacing.xl, gap: spacing.md }}>
           {ROLES.map((r) => {
@@ -52,7 +54,7 @@ export default function RoleSelect() {
       <View style={styles.stickyCTA}>
         <PrimaryButton
           testID="continue-button"
-          label="Continue"
+          label={t("common.continue")}
           icon="arrow-forward"
           onPress={() => router.push({ pathname: "/(auth)/login", params: { role: selected } } as any)}
         />

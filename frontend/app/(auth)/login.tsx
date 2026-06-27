@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/auth";
+import { useT } from "@/src/i18n";
 import { colors, spacing, type } from "@/src/theme";
 import { H1, Body, Muted, PrimaryButton, Field } from "@/src/ui";
 
@@ -11,6 +12,7 @@ export default function Login() {
   const router = useRouter();
   const { role } = useLocalSearchParams<{ role?: string }>();
   const { login } = useAuth();
+  const { t } = useT();
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,7 +21,7 @@ export default function Login() {
   const submit = async () => {
     setErr("");
     if (mobile.length < 10 || password.length < 4) {
-      setErr("Enter a valid mobile and password (min 4 chars)");
+      setErr(t("auth.invalidCreds"));
       return;
     }
     setLoading(true);
@@ -43,17 +45,17 @@ export default function Login() {
           <Pressable testID="back-button" onPress={() => router.back()} style={{ width: 40, height: 40, justifyContent: "center" }}>
             <Ionicons name="arrow-back" size={26} color={colors.onSurface} />
           </Pressable>
-          <H1 style={{ marginTop: spacing.md }}>Login</H1>
-          <Muted style={{ marginTop: 6 }}>Use your registered mobile number</Muted>
+          <H1 style={{ marginTop: spacing.md }}>{t("auth.login")}</H1>
+          <Muted style={{ marginTop: 6 }}>{t("auth.loginSub")}</Muted>
 
           <View style={{ marginTop: spacing.xl }}>
-            <Field testID="login-mobile" label="Mobile Number" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" placeholder="10-digit mobile" />
-            <Field testID="login-password" label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="••••••••" />
+            <Field testID="login-mobile" label={t("auth.mobile")} value={mobile} onChangeText={setMobile} keyboardType="phone-pad" placeholder={t("auth.mobilePlaceholder")} />
+            <Field testID="login-password" label={t("auth.password")} value={password} onChangeText={setPassword} secureTextEntry placeholder="••••••••" />
             {err ? <Body style={{ color: colors.error, marginBottom: 8 }}>{err}</Body> : null}
           </View>
 
           <View style={styles.demoBox}>
-            <Muted style={{ fontWeight: "700", color: colors.onSurface }}>Demo accounts (password: demo1234)</Muted>
+            <Muted style={{ fontWeight: "700", color: colors.onSurface }}>{t("auth.demoAccounts")}</Muted>
             <Pressable testID="demo-worker" onPress={() => fillDemo("9000000002")} style={styles.demoRow}>
               <Ionicons name="hammer-outline" size={18} color={colors.brand} />
               <Body>Worker — 9000000002</Body>
@@ -78,12 +80,12 @@ export default function Login() {
 
           <Pressable testID="goto-register" onPress={() => router.push({ pathname: "/(auth)/register", params: { role: role || "worker" } } as any)}>
             <Body style={{ marginTop: spacing.lg, textAlign: "center", color: colors.onSurfaceSecondary }}>
-              New here? <Body style={{ color: colors.brand, fontWeight: "700" }}>Create account</Body>
+              {t("auth.newHere")} <Body style={{ color: colors.brand, fontWeight: "700" }}>{t("auth.createAccount")}</Body>
             </Body>
           </Pressable>
         </ScrollView>
         <View style={styles.cta}>
-          <PrimaryButton testID="login-submit" label="Login" loading={loading} onPress={submit} />
+          <PrimaryButton testID="login-submit" label={t("auth.login")} loading={loading} onPress={submit} />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

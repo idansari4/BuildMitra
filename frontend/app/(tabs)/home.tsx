@@ -6,12 +6,14 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
+import { useT } from "@/src/i18n";
 import { colors, radius, spacing, SKILLS, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Chip, Card } from "@/src/ui";
 
 export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t: tr } = useT();
   const [jobs, setJobs] = useState<any[]>([]);
   const [skill, setSkill] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,8 +49,8 @@ export default function Home() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={styles.header}>
         <View>
-          <Muted>Welcome back</Muted>
-          <H2 testID="home-greeting">Hi, {user?.name?.split(" ")[0]}</H2>
+          <Muted>{tr("home.welcomeBack")}</Muted>
+          <H2 testID="home-greeting">{tr("home.hi")}, {user?.name?.split(" ")[0]}</H2>
         </View>
         <View style={styles.badge}>
           <Ionicons name="location" size={14} color={colors.brand} />
@@ -62,7 +64,7 @@ export default function Home() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipRow}
         >
-          <Chip testID="skill-all" label="All" selected={!skill} onPress={() => setSkill(null)} />
+          <Chip testID="skill-all" label={tr("common.all")} selected={!skill} onPress={() => setSkill(null)} />
           {SKILLS.map((s) => (
             <Chip key={s} testID={`skill-${s}`} label={s} selected={skill === s} onPress={() => setSkill(s)} />
           ))}
@@ -80,9 +82,9 @@ export default function Home() {
               <LinearGradient colors={[colors.brand, "#D97706"]} style={styles.aiCard}>
                 <Ionicons name="sparkles" size={24} color={colors.onBrandPrimary} />
                 <View style={{ flex: 1 }}>
-                  <Body style={{ color: colors.onBrandPrimary, fontWeight: "800" }}>AI Job Match</Body>
+                  <Body style={{ color: colors.onBrandPrimary, fontWeight: "800" }}>{tr("home.ai.title")}</Body>
                   <Muted style={{ color: colors.onBrandPrimary, opacity: 0.85 }}>
-                    {aiLoading ? "Finding best jobs..." : aiMatch ? aiMatch.summary : "Tap to find your best-fit jobs"}
+                    {aiLoading ? tr("home.ai.loading") : aiMatch ? aiMatch.summary : tr("home.ai.cta")}
                   </Muted>
                 </View>
                 {aiLoading ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Ionicons name="arrow-forward-circle" size={28} color={colors.onBrandPrimary} />}
@@ -96,8 +98,8 @@ export default function Home() {
           ) : (
             <View style={{ alignItems: "center", marginTop: 60 }}>
               <Ionicons name="briefcase-outline" size={56} color={colors.borderStrong} />
-              <Body style={{ marginTop: 12 }}>{isWorker ? "No jobs found." : "No jobs posted yet."}</Body>
-              <Muted style={{ marginTop: 4 }}>{isWorker ? "Try a different skill." : "Tap + Post Job to begin."}</Muted>
+              <Body style={{ marginTop: 12 }}>{isWorker ? tr("home.empty.worker") : tr("home.empty.client")}</Body>
+              <Muted style={{ marginTop: 4 }}>{isWorker ? tr("home.empty.worker.sub") : tr("home.empty.client.sub")}</Muted>
             </View>
           )
         }
@@ -109,7 +111,7 @@ export default function Home() {
                 {highlight && (
                   <View style={styles.aiTag}>
                     <Ionicons name="sparkles" size={12} color={colors.onBrandPrimary} />
-                    <Body style={{ fontSize: 11, color: colors.onBrandPrimary, fontWeight: "800" }}>AI MATCH</Body>
+                    <Body style={{ fontSize: 11, color: colors.onBrandPrimary, fontWeight: "800" }}>{tr("home.ai.tag")}</Body>
                   </View>
                 )}
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -122,17 +124,17 @@ export default function Home() {
                   </View>
                   <View style={styles.wage}>
                     <Body style={{ fontWeight: "800", color: colors.onBrandPrimary }}>₹{item.daily_wage}</Body>
-                    <Body style={{ fontSize: 10, color: colors.onBrandPrimary }}>per day</Body>
+                    <Body style={{ fontSize: 10, color: colors.onBrandPrimary }}>{tr("common.perDay")}</Body>
                   </View>
                 </View>
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                   <View style={styles.tagSkill}><Body style={{ fontSize: t.sm, fontWeight: "700" }}>{item.skill}</Body></View>
-                  <View style={styles.tagInfo}><Body style={{ fontSize: t.sm }}>{item.workers_needed} workers</Body></View>
+                  <View style={styles.tagInfo}><Body style={{ fontSize: t.sm }}>{item.workers_needed} {tr("common.workers")}</Body></View>
                   {item.urgency === "Urgent" && (
-                    <View style={styles.tagUrgent}><Body style={{ fontSize: t.sm, fontWeight: "700", color: colors.onError }}>Urgent</Body></View>
+                    <View style={styles.tagUrgent}><Body style={{ fontSize: t.sm, fontWeight: "700", color: colors.onError }}>{tr("common.urgent")}</Body></View>
                   )}
                   {!isWorker && (
-                    <View style={styles.tagInfo}><Body style={{ fontSize: t.sm }}>{item.applicants_count} applied</Body></View>
+                    <View style={styles.tagInfo}><Body style={{ fontSize: t.sm }}>{item.applicants_count} {tr("common.applied")}</Body></View>
                   )}
                 </View>
               </Card>

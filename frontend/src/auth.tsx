@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { api, loadToken, setToken } from "./api";
 
 export type User = {
-  id: string; name: string; mobile: string; role: "worker" | "contractor" | "client";
+  id: string; name: string; mobile: string; role: "worker" | "contractor" | "client" | "admin";
   photo?: string | null; skills?: string[]; experience_years?: number;
   daily_wage?: number; available?: boolean; city?: string; company_name?: string;
   rating_avg?: number; rating_count?: number; referral_code?: string;

@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth";
+import { I18nProvider } from "@/src/i18n";
 
 LogBox.ignoreAllLogs(true);
 
@@ -28,10 +29,12 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <StatusBar barStyle="dark-content" />
-          <Stack screenOptions={{ headerShown: false }} />
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <StatusBar barStyle="dark-content" />
+            <Stack screenOptions={{ headerShown: false }} />
+          </AuthProvider>
+        </I18nProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

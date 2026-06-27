@@ -5,6 +5,7 @@ Uber/Ola-style marketplace for India's construction workforce connecting Workers
 
 ## MVP Implemented
 **Auth**: JWT-based mobile + password (4 seeded demo accounts: admin/worker/contractor/client). Suspended accounts blocked at login.
+**Hindi i18n**: Custom lightweight i18n module (no extra deps) with 130+ translated strings across EN/HI. Language toggle (English / हिंदी) lives in Profile and Admin Profile, persisted to storage. All major screens — splash, role select, login, register, home feed (worker+client+contractor), tabs, profile, admin tabs and admin dashboard — react instantly to the toggle.
 **Admin panel**: Dashboard with 11 KPIs (workers/contractors/clients counts, active/completed jobs, applications, today's attendance, open complaints, pending verifications, wallet payouts), Users tab (filter by role + search by name/mobile + Verify/Suspend/Unsuspend), Jobs tab (list all + Close), Complaints tab (open/resolved/rejected filters + Resolve/Reject), Admin Profile.
 **Worker flow**: Splash → Role select → Login → Bottom tabs (Jobs / Applied / Attendance / Wallet / Profile). Browse jobs by skill chips, AI Job Match card powered by Claude Haiku 4.5 via Emergent LLM key, job detail with Apply (duplicate-blocked), attendance via GPS + selfie, profile editing of skills + daily wage.
 **Client/Contractor flow**: Home shows posted jobs, Post Job tab to create listings (skill, wage, location, urgency), Activity shows applicants per job.

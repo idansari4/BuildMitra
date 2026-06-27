@@ -4,12 +4,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/auth";
+import { useT } from "@/src/i18n";
 import { colors, radius, spacing, type as t } from "@/src/theme";
-import { H1, H2, Body, Muted, Card, SecondaryButton } from "@/src/ui";
+import { H1, H2, Body, Muted, Card, SecondaryButton, Chip } from "@/src/ui";
 
 export default function AdminProfile() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { t: tr, lang, setLang } = useT();
 
   const onLogout = async () => { await logout(); router.replace("/role-select"); };
 
@@ -26,23 +28,31 @@ export default function AdminProfile() {
           </View>
         </View>
 
-        <H2>About</H2>
+        <H2>{tr("admin.about")}</H2>
         <Card>
-          <Row icon="person-circle-outline" label="Role" value="Platform Admin" />
-          <Row icon="business-outline" label="Company" value={user?.company_name || "BuildMitra"} />
-          <Row icon="location-outline" label="HQ" value={user?.city || "—"} />
+          <Row icon="person-circle-outline" label={tr("admin.role.label")} value={tr("admin.role.value")} />
+          <Row icon="business-outline" label={tr("profile.company")} value={user?.company_name || "BuildMitra"} />
+          <Row icon="location-outline" label={tr("admin.hq")} value={user?.city || "—"} />
         </Card>
 
-        <H2>Admin Powers</H2>
+        <H2>{tr("profile.language")}</H2>
         <Card>
-          <Bullet text="Verify worker and contractor profiles (Aadhaar gate)" />
-          <Bullet text="Suspend / unsuspend any user account" />
-          <Bullet text="Close any job posting" />
-          <Bullet text="Resolve or reject user complaints" />
-          <Bullet text="View platform-wide attendance & analytics" />
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Chip testID="lang-en" label="English" selected={lang === "en"} onPress={() => setLang("en")} />
+            <Chip testID="lang-hi" label="हिंदी" selected={lang === "hi"} onPress={() => setLang("hi")} />
+          </View>
         </Card>
 
-        <SecondaryButton testID="admin-logout" label="Logout" onPress={onLogout} />
+        <H2>{tr("admin.powers")}</H2>
+        <Card>
+          <Bullet text={tr("admin.power.1")} />
+          <Bullet text={tr("admin.power.2")} />
+          <Bullet text={tr("admin.power.3")} />
+          <Bullet text={tr("admin.power.4")} />
+          <Bullet text={tr("admin.power.5")} />
+        </Card>
+
+        <SecondaryButton testID="admin-logout" label={tr("common.logout")} onPress={onLogout} />
       </ScrollView>
     </SafeAreaView>
   );

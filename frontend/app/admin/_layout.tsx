@@ -2,10 +2,12 @@ import React from "react";
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/auth";
+import { useT } from "@/src/i18n";
 import { colors } from "@/src/theme";
 
 export default function AdminLayout() {
   const { user, loading } = useAuth();
+  const { t } = useT();
   if (loading) return null;
   if (!user) return <Redirect href="/role-select" />;
   if (user.role !== "admin") return <Redirect href="/(tabs)/home" />;
@@ -26,41 +28,11 @@ export default function AdminLayout() {
         tabBarLabelStyle: { fontWeight: "700", fontSize: 11 },
       }}
     >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: "Dashboard",
-          tabBarIcon: ({ color, size }) => <Ionicons name="speedometer" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="users"
-        options={{
-          title: "Users",
-          tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="jobs"
-        options={{
-          title: "Jobs",
-          tabBarIcon: ({ color, size }) => <Ionicons name="briefcase" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="complaints"
-        options={{
-          title: "Complaints",
-          tabBarIcon: ({ color, size }) => <Ionicons name="alert-circle" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />,
-        }}
-      />
+      <Tabs.Screen name="dashboard" options={{ title: t("tab.dashboard"), tabBarIcon: ({ color, size }) => <Ionicons name="speedometer" size={size} color={color} /> }} />
+      <Tabs.Screen name="users" options={{ title: t("tab.users"), tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} /> }} />
+      <Tabs.Screen name="jobs" options={{ title: t("tab.jobs"), tabBarIcon: ({ color, size }) => <Ionicons name="briefcase" size={size} color={color} /> }} />
+      <Tabs.Screen name="complaints" options={{ title: t("tab.complaints"), tabBarIcon: ({ color, size }) => <Ionicons name="alert-circle" size={size} color={color} /> }} />
+      <Tabs.Screen name="profile" options={{ title: t("tab.profile"), tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} /> }} />
     </Tabs>
   );
 }

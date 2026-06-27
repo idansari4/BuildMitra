@@ -4,12 +4,14 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/auth";
+import { useT } from "@/src/i18n";
 import { colors, spacing, type } from "@/src/theme";
 import { H1, Body } from "@/src/ui";
 
 export default function Index() {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { t } = useT();
 
   useEffect(() => {
     if (loading) return;
@@ -38,7 +40,7 @@ export default function Index() {
         </View>
         <H1 style={{ color: colors.onSurfaceInverse, marginTop: spacing.lg }}>BuildMitra</H1>
         <Body style={{ color: colors.surfaceTertiary, marginTop: 6 }}>
-          India's Construction Network
+          {t("app.tagline")}
         </Body>
         <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.lg }} />
       </View>
