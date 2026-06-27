@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 3 — Contractor ERP module tested end-to-end. Backend: 29/29 pytest cases pass for /api/erp/* (materials CRUD, tools CRUD with status enum, estimates auto-compute total_cost/profit/margin_pct, bills with auto bill_no BM-YYYY-XXXX + GST calc + mark-paid, dashboard KPIs including low_stock detection, and 403 guards for worker/client/admin + 401 for no token). Frontend: contractor login (9000000003/demo1234) shows ERP tab in bottom tabs; ERP hub renders hero, 4 KPI cards (Materials/Tools/Estimates/Bills), revenue summary (Pending/Paid), and 4 module link cards. Materials: add modal works with category chips, qty<=min_qty correctly shows LOW STOCK red tag, delete works. Bills: add modal computes live subtotal=12,500 + GST 18%=2,250 + total=14,750 with 2 dynamic line items; saved bill gets auto bill_no BM-2026-0004; Mark Paid toggles to PAID tag; Share button present. Estimates: list shows margin% badge (green 20% when profit positive, red 0% when revenue 0). Tools page renders with empty state. 403 guard verified visually: worker (9000000002) bottom tabs are Jobs/Applied/Attendance/Wallet/Profile — NO ERP tab.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "H1/Body Text wrappers in erp.tsx", "issue": "testIDs erp-hero (H1, line 44), rev-pending (Body, line 67), rev-paid (Body, line 73) do not forward to data-testid on RN Web. Same pattern as iteration 2. Cosmetic only — UI renders correctly and content is visible; only impacts e2e selectors. Reference: /app/frontend/app/(tabs)/erp.tsx:44, :67, :73"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_erp.py",
+    "/app/test_reports/pytest/erp_results.xml"
+  ],
+  "action_items": [
+    "Optional (cosmetic): wrap H1/Body that need a testID inside a <View testID=...> so e2e selectors can query them on RN Web. Affects erp-hero, rev-pending, rev-paid in /app/frontend/app/(tabs)/erp.tsx. Same recurring issue noted in iteration_2 — consider a small wrapper helper component once.",
+    "Optional cleanup: pytest run created TEST_* data — 2 estimates (TEST_Villa, TEST_Zero), 4 bills (BM-2026-0001..0004 — one already paid via UI test), and one TEST_UI_Sand material was added+deleted via UI. They don't break demo flows but show in contractor's list."
+  ],
+  "critical_code_review_comments": [
+    "/api/erp/* uses contractor_user dependency that returns 403 if role != 'contractor' — verified for worker, client, admin (11 guard tests).",
+    "Bill numbering uses count_documents per owner + 1 (server.py:548-549). Single-contractor safe but not concurrency-safe under high parallel POSTs; acceptable for this app. Year is from UTC now.",
+    "Margin calc divides by revenue with explicit 0-guard (server.py:521) — verified with revenue=0 estimate.",
+    "Low stock query uses $expr {$lte: ['$qty','$min_qty']} which works correctly even when min_qty=0 (verified in dashboard test).",
+    "All ERP responses exclude _id correctly via projection {'_id': 0}.",
+    "Owner-scoped queries everywhere (find/update/delete filter by owner=user.id) — cross-contractor isolation enforced.",
+    "Bills auto bill_no zero-padded to 4 digits, format BM-2026-NNNN verified end-to-end.",
+    "ERP tab visibility controlled at tab layout level via href: contractor only (frontend/app/(tabs)/_layout.tsx:69) — verified worker has no ERP tab."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_erp.py (created — 29 tests across 6 classes, all passing)"
+  ],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "100% (ERP tab visible for contractor only, hub + 4 modules + bills auto bill_no + GST + mark-paid + LOW STOCK tag + margin% badge all working)"},
+  "seed_data_creation": "pytest created TEST_Villa + TEST_Zero estimates, BM-2026-0001..0003 bills (one paid via test), plus a TEST_UI_Sand material via UI that was deleted. Demo accounts (9000000000/01/02/03) untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "ERP tests at /app/backend/tests/test_erp.py (29 tests). Previous suites: /app/backend/tests/test_buildmitra.py (13), test_admin.py (22). Contractor login 9000000003/demo1234 → /home → ERP tab. Bill numbering format BM-YYYY-NNNN per owner. testIDs available on ERP hub: kpi-materials/tools/estimates/bills, module-materials/tools/estimates/bills, back-btn. On Materials: add-material, mat-name/unit/qty/min/cost/site (testID on Field wrapper — input is child), save-mat, mat-{id}, del-{id}. On Bills: add-bill, bill-to/project/tax, item-desc-{i}/item-qty-{i}/item-rate-{i}, add-line, save-bill, bill-{id}, total-{id}, paid-{id}, share-{id}. Field testIDs on RN Web are on the wrapper — to interact with the input, use placeholder selector or nth input[inputmode='decimal']. Text-based testIDs (H1/Body) like erp-hero/rev-pending/rev-paid do not forward to data-testid.",
+  "rca_of_issue": "No bugs found in this iteration. All 29 backend tests passed first run; all ERP UI flows render and integrate correctly with backend."
+}

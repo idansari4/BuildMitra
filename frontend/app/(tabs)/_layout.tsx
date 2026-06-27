@@ -62,6 +62,14 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="erp"
+        options={{
+          title: "ERP",
+          tabBarIcon: ({ color, size }) => <Ionicons name="grid" size={size} color={color} />,
+          href: user.role === "contractor" ? "/(tabs)/erp" : null,
+        }}
+      />
+      <Tabs.Screen
         name="wallet"
         options={{
           title: t("tab.wallet"),

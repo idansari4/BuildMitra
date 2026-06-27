@@ -128,6 +128,47 @@ class ComplaintIn(BaseModel):
     subject: str
     description: str
 
+class MaterialIn(BaseModel):
+    name: str
+    category: Optional[str] = ""
+    unit: Optional[str] = "unit"
+    qty: float = 0
+    min_qty: float = 0
+    cost_per_unit: float = 0
+    site: Optional[str] = ""
+
+class ToolIn(BaseModel):
+    name: str
+    code: Optional[str] = ""
+    assigned_to: Optional[str] = ""
+    status: str = "available"
+    purchase_cost: float = 0
+    notes: Optional[str] = ""
+
+class EstimateIn(BaseModel):
+    project_name: str
+    client_name: Optional[str] = ""
+    site: Optional[str] = ""
+    labour_cost: float = 0
+    material_cost: float = 0
+    equipment_cost: float = 0
+    transport_cost: float = 0
+    misc_cost: float = 0
+    revenue: float = 0
+    notes: Optional[str] = ""
+
+class BillLine(BaseModel):
+    description: str
+    qty: float = 1
+    rate: float = 0
+
+class BillIn(BaseModel):
+    bill_to: str
+    project: Optional[str] = ""
+    items: List[BillLine]
+    tax_pct: float = 18
+    notes: Optional[str] = ""
+
 class RatingIn(BaseModel):
     target_user_id: str
     job_id: Optional[str] = None
@@ -418,6 +459,139 @@ async def ai_match_jobs(user=Depends(current_user)):
         ids = [j["id"] for j in jobs[:3]]
         reason = reason or "Matched by skill and wage."
     return {"summary": reason, "top_job_ids": ids}
+
+# --- ERP (Contractor scope) ---
+async def contractor_user(user=Depends(current_user)) -> dict:
+    if user.get("role") != "contractor":
+        raise HTTPException(403, "Contractors only")
+    return user
+
+# Materials
+@api.post("/erp/materials")
+async def add_material(body: MaterialIn, user=Depends(contractor_user)):
+    rec = {"id": str(uuid.uuid4()), "owner": user["id"], **body.model_dump(), "created_at": now_iso()}
+    await db.materials.insert_one(rec); rec.pop("_id", None); return rec
+
+@api.get("/erp/materials")
+async def list_materials(user=Depends(contractor_user)):
+    cur = db.materials.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    return await cur.to_list(length=500)
+
+@api.put("/erp/materials/{mid}")
+async def update_material(mid: str, body: MaterialIn, user=Depends(contractor_user)):
+    res = await db.materials.update_one({"id": mid, "owner": user["id"]}, {"$set": body.model_dump()})
+    if not res.matched_count: raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+@api.delete("/erp/materials/{mid}")
+async def del_material(mid: str, user=Depends(contractor_user)):
+    res = await db.materials.delete_one({"id": mid, "owner": user["id"]})
+    if not res.deleted_count: raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+# Tools
+@api.post("/erp/tools")
+async def add_tool(body: ToolIn, user=Depends(contractor_user)):
+    rec = {"id": str(uuid.uuid4()), "owner": user["id"], **body.model_dump(), "created_at": now_iso()}
+    await db.tools.insert_one(rec); rec.pop("_id", None); return rec
+
+@api.get("/erp/tools")
+async def list_tools(user=Depends(contractor_user)):
+    cur = db.tools.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    return await cur.to_list(length=500)
+
+@api.put("/erp/tools/{tid}")
+async def update_tool(tid: str, body: ToolIn, user=Depends(contractor_user)):
+    res = await db.tools.update_one({"id": tid, "owner": user["id"]}, {"$set": body.model_dump()})
+    if not res.matched_count: raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+@api.delete("/erp/tools/{tid}")
+async def del_tool(tid: str, user=Depends(contractor_user)):
+    res = await db.tools.delete_one({"id": tid, "owner": user["id"]})
+    if not res.deleted_count: raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+# Estimates
+@api.post("/erp/estimates")
+async def add_estimate(body: EstimateIn, user=Depends(contractor_user)):
+    d = body.model_dump()
+    total_cost = d["labour_cost"] + d["material_cost"] + d["equipment_cost"] + d["transport_cost"] + d["misc_cost"]
+    profit = d["revenue"] - total_cost
+    margin = round((profit / d["revenue"]) * 100, 2) if d["revenue"] else 0
+    rec = {"id": str(uuid.uuid4()), "owner": user["id"], **d,
+           "total_cost": total_cost, "profit": profit, "margin_pct": margin,
+           "created_at": now_iso()}
+    await db.estimates.insert_one(rec); rec.pop("_id", None); return rec
+
+@api.get("/erp/estimates")
+async def list_estimates(user=Depends(contractor_user)):
+    cur = db.estimates.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    return await cur.to_list(length=500)
+
+@api.delete("/erp/estimates/{eid}")
+async def del_estimate(eid: str, user=Depends(contractor_user)):
+    res = await db.estimates.delete_one({"id": eid, "owner": user["id"]})
+    if not res.deleted_count: raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+# Bills
+def _calc_bill(items, tax_pct):
+    subtotal = sum((it.get("qty", 0) * it.get("rate", 0)) for it in items)
+    tax = round(subtotal * tax_pct / 100, 2)
+    return subtotal, tax, subtotal + tax
+
+@api.post("/erp/bills")
+async def add_bill(body: BillIn, user=Depends(contractor_user)):
+    items = [it.model_dump() for it in body.items]
+    sub, tax, total = _calc_bill(items, body.tax_pct)
+    count = await db.bills.count_documents({"owner": user["id"]})
+    bill_no = f"BM-{datetime.now(timezone.utc).year}-{count+1:04d}"
+    rec = {"id": str(uuid.uuid4()), "owner": user["id"], "bill_no": bill_no,
+           "bill_to": body.bill_to, "project": body.project, "items": items,
+           "tax_pct": body.tax_pct, "subtotal": sub, "tax_amount": tax, "total": total,
+           "notes": body.notes, "status": "unpaid", "created_at": now_iso()}
+    await db.bills.insert_one(rec); rec.pop("_id", None); return rec
+
+@api.get("/erp/bills")
+async def list_bills(user=Depends(contractor_user)):
+    cur = db.bills.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    return await cur.to_list(length=500)
+
+@api.post("/erp/bills/{bid}/mark-paid")
+async def mark_bill_paid(bid: str, user=Depends(contractor_user)):
+    res = await db.bills.update_one({"id": bid, "owner": user["id"]}, {"$set": {"status": "paid"}})
+    if not res.matched_count: raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+@api.delete("/erp/bills/{bid}")
+async def del_bill(bid: str, user=Depends(contractor_user)):
+    res = await db.bills.delete_one({"id": bid, "owner": user["id"]})
+    if not res.deleted_count: raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+@api.get("/erp/dashboard")
+async def erp_dashboard(user=Depends(contractor_user)):
+    mat = await db.materials.count_documents({"owner": user["id"]})
+    low = await db.materials.count_documents({"owner": user["id"], "$expr": {"$lte": ["$qty", "$min_qty"]}})
+    tools_total = await db.tools.count_documents({"owner": user["id"]})
+    tools_inuse = await db.tools.count_documents({"owner": user["id"], "status": "in_use"})
+    est = await db.estimates.count_documents({"owner": user["id"]})
+    bills_total = await db.bills.count_documents({"owner": user["id"]})
+    bills_paid = await db.bills.count_documents({"owner": user["id"], "status": "paid"})
+    rev_agg = await db.bills.aggregate([
+        {"$match": {"owner": user["id"]}},
+        {"$group": {"_id": "$status", "sum": {"$sum": "$total"}}}
+    ]).to_list(length=10)
+    revenue_paid = sum(r["sum"] for r in rev_agg if r["_id"] == "paid")
+    revenue_pending = sum(r["sum"] for r in rev_agg if r["_id"] != "paid")
+    return {
+        "materials_total": mat, "materials_low_stock": low,
+        "tools_total": tools_total, "tools_in_use": tools_inuse,
+        "estimates_total": est,
+        "bills_total": bills_total, "bills_paid": bills_paid,
+        "revenue_paid": revenue_paid, "revenue_pending": revenue_pending,
+    }
 
 # --- Complaints (any user can file) ---
 @api.post("/complaints")
