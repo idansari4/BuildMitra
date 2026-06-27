@@ -8,9 +8,6 @@
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -33,7 +30,38 @@
           "resizeMode": "contain",
           "backgroundColor": "#000"
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Capture selfies to verify your attendance"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Verify your attendance at job sites"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Capture selfies for attendance verification"
+        }
       ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Capture attendance selfies",
+        "NSLocationWhenInUseUsageDescription": "Verify attendance location",
+        "NSPhotoLibraryUsageDescription": "Pick profile photos"
+      }
+    },
+    "android_permissions_placeholder": [
+      "CAMERA",
+      "ACCESS_FINE_LOCATION",
+      "ACCESS_COARSE_LOCATION"
     ],
     "experiments": {
       "typedRoutes": true
