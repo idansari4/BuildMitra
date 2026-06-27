@@ -9,6 +9,7 @@ export default function TabsLayout() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Redirect href="/role-select" />;
+  if (user.role === "admin") return <Redirect href={"/admin/dashboard" as any} />;
 
   const isWorker = user.role === "worker";
 

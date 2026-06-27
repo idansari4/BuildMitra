@@ -24,8 +24,9 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      await login(mobile, password);
-      router.replace("/(tabs)/home");
+      const u = await login(mobile, password);
+      if (u.role === "admin") router.replace("/admin/dashboard" as any);
+      else router.replace("/(tabs)/home");
     } catch (e: any) {
       setErr(e?.message || "Login failed");
     } finally {
@@ -64,6 +65,14 @@ export default function Login() {
             <Pressable testID="demo-contractor" onPress={() => fillDemo("9000000003")} style={styles.demoRow}>
               <Ionicons name="people-outline" size={18} color={colors.brand} />
               <Body>Contractor — 9000000003</Body>
+            </Pressable>
+            <Pressable
+              testID="demo-admin"
+              onPress={() => { setMobile("9000000000"); setPassword("admin1234"); }}
+              style={styles.demoRow}
+            >
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.brand} />
+              <Body>Admin — 9000000000 (pw: admin1234)</Body>
             </Pressable>
           </View>
 

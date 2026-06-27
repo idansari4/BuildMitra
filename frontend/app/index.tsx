@@ -14,7 +14,8 @@ export default function Index() {
   useEffect(() => {
     if (loading) return;
     const t = setTimeout(() => {
-      if (user) router.replace("/(tabs)/home");
+      if (user?.role === "admin") router.replace("/admin/dashboard" as any);
+      else if (user) router.replace("/(tabs)/home");
       else router.replace("/role-select");
     }, 800);
     return () => clearTimeout(t);

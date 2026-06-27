@@ -123,6 +123,11 @@ class AttendanceIn(BaseModel):
     lng: float
     selfie: str  # base64
 
+class ComplaintIn(BaseModel):
+    against_user_id: Optional[str] = None
+    subject: str
+    description: str
+
 class RatingIn(BaseModel):
     target_user_id: str
     job_id: Optional[str] = None
@@ -195,6 +200,8 @@ async def login(body: LoginIn):
     user = await db.users.find_one({"mobile": body.mobile})
     if not user or not verify_pw(body.password, user["password"]):
         raise HTTPException(401, "Invalid credentials")
+    if user.get("suspended"):
+        raise HTTPException(403, "Account suspended. Contact support.")
     token = make_token(user["id"], user["role"])
     user.pop("_id", None)
     user.pop("password", None)
@@ -412,6 +419,139 @@ async def ai_match_jobs(user=Depends(current_user)):
         reason = reason or "Matched by skill and wage."
     return {"summary": reason, "top_job_ids": ids}
 
+# --- Complaints (any user can file) ---
+@api.post("/complaints")
+async def file_complaint(body: ComplaintIn, user=Depends(current_user)):
+    rec = {
+        "id": str(uuid.uuid4()),
+        "by_user_id": user["id"],
+        "by_user_name": user["name"],
+        "by_user_role": user["role"],
+        "against_user_id": body.against_user_id,
+        "subject": body.subject,
+        "description": body.description,
+        "status": "open",  # open | resolved | rejected
+        "admin_note": "",
+        "created_at": now_iso(),
+    }
+    await db.complaints.insert_one(rec)
+    rec.pop("_id", None)
+    return rec
+
+@api.get("/complaints/mine")
+async def my_complaints(user=Depends(current_user)):
+    cursor = db.complaints.find({"by_user_id": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(length=100)
+
+# --- Admin ---
+async def admin_user(user=Depends(current_user)) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin only")
+    return user
+
+@api.get("/admin/stats")
+async def admin_stats(_=Depends(admin_user)):
+    total_workers = await db.users.count_documents({"role": "worker"})
+    total_contractors = await db.users.count_documents({"role": "contractor"})
+    total_clients = await db.users.count_documents({"role": "client"})
+    total_jobs = await db.jobs.count_documents({})
+    active_jobs = await db.jobs.count_documents({"status": "open"})
+    completed_jobs = await db.jobs.count_documents({"status": "closed"})
+    total_applications = await db.applications.count_documents({})
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    daily_attendance = await db.attendance.count_documents({"created_at": {"$regex": f"^{today}"}})
+    open_complaints = await db.complaints.count_documents({"status": "open"})
+    pending_verifications = await db.users.count_documents({
+        "role": {"$in": ["worker", "contractor"]}, "aadhaar_verified": False
+    })
+    total_wallet = await db.users.aggregate([
+        {"$group": {"_id": None, "sum": {"$sum": "$wallet_balance"}}}
+    ]).to_list(length=1)
+    revenue_proxy = (total_wallet[0]["sum"] if total_wallet else 0)
+    return {
+        "total_workers": total_workers,
+        "total_contractors": total_contractors,
+        "total_clients": total_clients,
+        "total_jobs": total_jobs,
+        "active_jobs": active_jobs,
+        "completed_jobs": completed_jobs,
+        "total_applications": total_applications,
+        "daily_attendance": daily_attendance,
+        "open_complaints": open_complaints,
+        "pending_verifications": pending_verifications,
+        "wallet_payouts": revenue_proxy,
+    }
+
+@api.get("/admin/users")
+async def admin_users(role: Optional[str] = None, q: Optional[str] = None, _=Depends(admin_user)):
+    query: dict = {}
+    if role:
+        query["role"] = role
+    if q:
+        query["$or"] = [{"name": {"$regex": q, "$options": "i"}}, {"mobile": {"$regex": q}}]
+    cursor = db.users.find(query, {"_id": 0, "password": 0}).sort("created_at", -1).limit(200)
+    return await cursor.to_list(length=200)
+
+@api.post("/admin/users/{user_id}/verify")
+async def admin_verify(user_id: str, _=Depends(admin_user)):
+    res = await db.users.update_one({"id": user_id}, {"$set": {"aadhaar_verified": True}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "User not found")
+    return {"ok": True}
+
+@api.post("/admin/users/{user_id}/suspend")
+async def admin_suspend(user_id: str, _=Depends(admin_user)):
+    res = await db.users.update_one({"id": user_id}, {"$set": {"suspended": True, "available": False}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "User not found")
+    return {"ok": True}
+
+@api.post("/admin/users/{user_id}/unsuspend")
+async def admin_unsuspend(user_id: str, _=Depends(admin_user)):
+    res = await db.users.update_one({"id": user_id}, {"$set": {"suspended": False, "available": True}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "User not found")
+    return {"ok": True}
+
+@api.get("/admin/jobs")
+async def admin_jobs(_=Depends(admin_user)):
+    cursor = db.jobs.find({}, {"_id": 0}).sort("created_at", -1).limit(200)
+    return await cursor.to_list(length=200)
+
+@api.post("/admin/jobs/{job_id}/close")
+async def admin_close_job(job_id: str, _=Depends(admin_user)):
+    res = await db.jobs.update_one({"id": job_id}, {"$set": {"status": "closed"}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Job not found")
+    return {"ok": True}
+
+@api.get("/admin/attendance")
+async def admin_attendance(_=Depends(admin_user)):
+    cursor = db.attendance.find({}, {"_id": 0, "selfie": 0}).sort("created_at", -1).limit(200)
+    return await cursor.to_list(length=200)
+
+@api.get("/admin/complaints")
+async def admin_complaints(status: Optional[str] = None, _=Depends(admin_user)):
+    query: dict = {}
+    if status:
+        query["status"] = status
+    cursor = db.complaints.find(query, {"_id": 0}).sort("created_at", -1).limit(200)
+    return await cursor.to_list(length=200)
+
+@api.post("/admin/complaints/{cid}/resolve")
+async def admin_resolve_complaint(cid: str, note: Optional[str] = "", _=Depends(admin_user)):
+    res = await db.complaints.update_one({"id": cid}, {"$set": {"status": "resolved", "admin_note": note or ""}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Complaint not found")
+    return {"ok": True}
+
+@api.post("/admin/complaints/{cid}/reject")
+async def admin_reject_complaint(cid: str, note: Optional[str] = "", _=Depends(admin_user)):
+    res = await db.complaints.update_one({"id": cid}, {"$set": {"status": "rejected", "admin_note": note or ""}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Complaint not found")
+    return {"ok": True}
+
 # --- Seed ---
 async def seed():
     if await db.users.count_documents({"role": "client"}) > 0:
@@ -450,6 +590,44 @@ async def seed():
         "created_at": now_iso(),
     }
     await db.users.insert_many([demo_client, demo_worker, demo_contractor])
+
+    admin_user_doc = {
+        "id": str(uuid.uuid4()), "name": "BuildMitra Admin",
+        "mobile": "9000000000", "password": hash_pw("admin1234"),
+        "role": "admin", "photo": None, "skills": [], "experience_years": 0,
+        "daily_wage": 0, "available": True, "city": "HQ",
+        "company_name": "BuildMitra", "aadhaar_verified": True, "language": "en",
+        "rating_avg": 0.0, "rating_count": 0,
+        "referral_code": "BMADMIN001", "referred_by": None, "wallet_balance": 0,
+        "created_at": now_iso(),
+    }
+    await db.users.insert_one(admin_user_doc)
+
+    # Seed two demo complaints so admin panel has content
+    await db.complaints.insert_many([
+        {
+            "id": str(uuid.uuid4()),
+            "by_user_id": demo_worker["id"],
+            "by_user_name": demo_worker["name"],
+            "by_user_role": "worker",
+            "against_user_id": demo_client["id"],
+            "subject": "Payment delayed by 7 days",
+            "description": "Worked at Andheri site for 5 days, payment still pending.",
+            "status": "open", "admin_note": "",
+            "created_at": now_iso(),
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "by_user_id": demo_client["id"],
+            "by_user_name": demo_client["name"],
+            "by_user_role": "client",
+            "against_user_id": demo_worker["id"],
+            "subject": "Worker not reporting on time",
+            "description": "Two workers consistently late by 1+ hour.",
+            "status": "open", "admin_note": "",
+            "created_at": now_iso(),
+        },
+    ])
 
     sample_jobs = [
         ("Mason needed for 2BHK plastering", "Need experienced mason for wall plastering work. Daily basis.", "Mason", 5, 900, "Andheri, Mumbai", "Urgent"),

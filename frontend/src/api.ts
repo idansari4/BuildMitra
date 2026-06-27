@@ -51,4 +51,25 @@ export const api = {
   wallet: () => req("GET", "/wallet"),
   rate: (b: any) => req("POST", "/ratings", b),
   aiMatch: () => req("POST", "/ai/match-jobs"),
+  // complaints
+  fileComplaint: (b: any) => req("POST", "/complaints", b),
+  myComplaints: () => req("GET", "/complaints/mine"),
+  // admin
+  adminStats: () => req("GET", "/admin/stats"),
+  adminUsers: (role?: string, q?: string) => {
+    const params = new URLSearchParams();
+    if (role) params.set("role", role);
+    if (q) params.set("q", q);
+    const qs = params.toString();
+    return req("GET", `/admin/users${qs ? "?" + qs : ""}`);
+  },
+  adminVerify: (uid: string) => req("POST", `/admin/users/${uid}/verify`),
+  adminSuspend: (uid: string) => req("POST", `/admin/users/${uid}/suspend`),
+  adminUnsuspend: (uid: string) => req("POST", `/admin/users/${uid}/unsuspend`),
+  adminJobs: () => req("GET", "/admin/jobs"),
+  adminCloseJob: (jid: string) => req("POST", `/admin/jobs/${jid}/close`),
+  adminAttendance: () => req("GET", "/admin/attendance"),
+  adminComplaints: (status?: string) => req("GET", `/admin/complaints${status ? `?status=${status}` : ""}`),
+  adminResolveComplaint: (cid: string) => req("POST", `/admin/complaints/${cid}/resolve`),
+  adminRejectComplaint: (cid: string) => req("POST", `/admin/complaints/${cid}/reject`),
 };
