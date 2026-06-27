@@ -5,8 +5,9 @@ Uber/Ola-style marketplace for India's construction workforce connecting Workers
 
 ## MVP Implemented
 **Auth**: JWT-based mobile + password (4 seeded demo accounts: admin/worker/contractor/client). Suspended accounts blocked at login.
-**Hindi i18n**: Custom lightweight i18n module (no extra deps) with 130+ translated strings across EN/HI. Language toggle (English / हिंदी) lives in Profile and Admin Profile, persisted to storage. All major screens — splash, role select, login, register, home feed (worker+client+contractor), tabs, profile, admin tabs and admin dashboard — react instantly to the toggle.
-**Admin panel**: Dashboard with 11 KPIs (workers/contractors/clients counts, active/completed jobs, applications, today's attendance, open complaints, pending verifications, wallet payouts), Users tab (filter by role + search by name/mobile + Verify/Suspend/Unsuspend), Jobs tab (list all + Close), Complaints tab (open/resolved/rejected filters + Resolve/Reject), Admin Profile.
+**Hindi i18n**: Custom lightweight module with 130+ EN/HI translations, language toggle in Profile (worker/client/contractor) + Admin Profile, persisted across restarts.
+**Contractor ERP** (contractor-only tab): ERP hub with 6 KPIs + revenue summary, 4 modules: **Materials** (inventory with qty/min/cost, LOW STOCK alerts), **Tools** (5 status states: available/in_use/maintenance/damaged/lost, optional QR code), **Cost Estimates** (live total cost + profit + margin% with 5 cost buckets: labour/material/equipment/transport/misc vs revenue), **Bills & Invoices** (auto bill_no `BM-YYYY-XXXX`, dynamic line items, GST tax, Mark Paid, native share to WhatsApp). All scoped to contractor's user_id.
+**Admin panel**: Dashboard with 11 KPIs, Users tab (filter+search+Verify/Suspend/Unsuspend), Jobs tab (Close), Complaints tab (Resolve/Reject), Admin Profile.
 **Worker flow**: Splash → Role select → Login → Bottom tabs (Jobs / Applied / Attendance / Wallet / Profile). Browse jobs by skill chips, AI Job Match card powered by Claude Haiku 4.5 via Emergent LLM key, job detail with Apply (duplicate-blocked), attendance via GPS + selfie, profile editing of skills + daily wage.
 **Client/Contractor flow**: Home shows posted jobs, Post Job tab to create listings (skill, wage, location, urgency), Activity shows applicants per job.
 **Wallet & Referral**: Unique referral code per user, ₹50 credit when referee signs up, gamified Bronze/Silver/Gold badges + share sheet.
@@ -29,8 +30,9 @@ Uber/Ola-style marketplace for India's construction workforce connecting Workers
 - GET /workers, GET /wallet
 - POST /ratings, GET /ratings/{user_id}
 - POST /ai/match-jobs
-- POST /complaints, GET /complaints/mine
+- POST/GET /complaints, GET /complaints/mine
 - **Admin (require role=admin):** GET /admin/stats, /admin/users, /admin/jobs, /admin/attendance, /admin/complaints; POST /admin/users/{id}/verify, /suspend, /unsuspend; /admin/jobs/{id}/close; /admin/complaints/{id}/resolve, /reject
+- **ERP (require role=contractor):** GET /erp/dashboard; CRUD /erp/materials, /erp/tools, /erp/estimates, /erp/bills; POST /erp/bills/{id}/mark-paid
 
 ## Roadmap (deferred from full spec)
 - Real OTP via Twilio SMS, Aadhaar verification API, Stripe/Razorpay UPI payments
