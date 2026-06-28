@@ -1560,18 +1560,21 @@ if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static_assets")
 
     @app.get("/favicon.ico", include_in_schema=False)
+    @app.head("/favicon.ico", include_in_schema=False)
     async def favicon():
         f = FRONTEND_DIST / "favicon.ico"
         return FileResponse(f) if f.exists() else JSONResponse({"detail": "Not Found"}, status_code=404)
 
     @app.get("/", include_in_schema=False)
+    @app.head("/", include_in_schema=False)
     async def spa_root():
-        return FileResponse(FRONTEND_DIST / "index.html")
+        return FileResponse(FRONTEND_DIST / "index.html", media_type="text/html")
 
     # SPA catch-all: any non-API route returns index.html so client-side
     # routing (expo-router) can take over. /api/* routes are matched
     # first because they were included before this catch-all.
     @app.get("/{full_path:path}", include_in_schema=False)
+    @app.head("/{full_path:path}", include_in_schema=False)
     async def spa_catch_all(full_path: str):
         # Don't intercept api routes (already matched), health endpoints,
         # or static asset paths (already mounted).
@@ -1582,6 +1585,17 @@ if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
         if candidate.is_file():
             return FileResponse(candidate)
         # Otherwise fall back to SPA index
-        return FileResponse(FRONTEND_DIST / "index.html")
+        return FileResponse(FRONTEND_DIST / "index.html", media_type="text/html")
 else:
     logger.warning("Expo web build not found at %s — frontend will not be served from backend.", FRONTEND_DIST)
+
+    # Friendly fallback so root URL doesn't return raw JSON 404 if dist is missing
+    @app.get("/", include_in_schema=False)
+    @app.head("/", include_in_schema=False)
+    async def root_fallback():
+        return JSONResponse({
+            "app": "BuildMitra",
+            "status": "Backend is running but web build is missing.",
+            "hint": "Run `expo export --platform web --output-dir dist` in frontend/ and redeploy.",
+            "api": "/api/health"
+        })

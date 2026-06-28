@@ -1,0 +1,48 @@
+{
+  "summary": "Backend-only verification of iter-10 HEAD-support fix on top of iter-9 SPA serving. 28/30 tests pass (93.3%). All critical link-previewer paths (HEAD /, HEAD /random-route, HEAD /favicon.ico, HEAD /deep/nested/route) return 200 with text/html content-type. Iter-9 regression suite (18 tests) all green. Two minor failures: HEAD /api/health and HEAD /health return 404 because FastAPI/Starlette does NOT auto-route HEAD to GET handlers (this was an incorrect assumption in the review request). Impact is low since link-previewers do not preview /api/* or /health endpoints, but flagging for awareness. Verified public preview URL also returns 200 for HEAD on SPA routes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "HEAD /api/health",
+        "issue": "Returns 404 instead of 200. FastAPI/Starlette does NOT auto-add HEAD to GET-only routes (contrary to the assumption noted in review_request). The SPA catch-all explicitly excludes 'api/' and 'health' prefixes so HEAD falls through to FastAPI default 404. Low-impact: link-previewers target HTML pages, not API endpoints. Fix (if desired): add explicit @api.head('/health') decorator alongside the GET, or remove 'health' from catch-all exclusion list."
+      },
+      {
+        "endpoint": "HEAD /health (root-level)",
+        "issue": "Same root cause as above — only @app.get('/health') declared, no HEAD. Returns 404. K8s probes use GET so no functional impact, but if any external monitor uses HEAD it will fail. Fix: add @app.head('/health') and @app.head('/healthz') decorators."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_spa_head_iter10.py",
+    "/app/backend/tests/test_spa_serving_iter9.py",
+    "/app/test_reports/pytest/iter10_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (low priority): To make HEAD /api/health and HEAD /health return 200 as well, either (a) add explicit @app.head decorators on those routes, or (b) add OPTIONS-style middleware. Currently not required because link-previewers don't hit those URLs, but it would make the HEAD-safety-net 100% consistent.",
+    "MAIN ITEM: All critical SPA HEAD paths (/, /favicon.ico, /<any-spa-route>) work correctly — the iter-10 fix accomplishes its stated goal of unblocking WhatsApp/iMessage/Facebook link previews. Safe to ship.",
+    "Reminder to user: PROD URL https://buildmitra.emergent.host still needs Publish/Redeploy click to pick up iter-9 SPA fix + iter-10 HEAD fix."
+  ],
+  "critical_code_review_comments": [
+    "server.py SPA block is clean: HEAD decorators correctly stacked on the same handlers as GET. Friendly JSON fallback at root when dist is missing is a nice touch.",
+    "Minor: catch-all exclusion list `('api/', 'api', 'health', 'healthz', '_expo/', 'assets/')` — the bare 'api' prefix will also exclude e.g. '/apidocs' if such a route existed; harmless today but worth noting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_spa_head_iter10.py (new test file)"
+  ],
+  "success_rate": {
+    "backend": "93.3% (28/30) — 100% for the iter-10 stated scope (SPA HEAD support); 2 failures are out-of-scope assumptions about FastAPI HEAD auto-routing",
+    "frontend": "not tested (backend-only request)"
+  },
+  "seed_data_creation": "None — used existing seeded demo user 9000000002/demo1234",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter-10 added @app.head decorators for SPA routes (/, /favicon.ico, /{full_path:path}) plus a friendly JSON fallback when frontend/dist is missing. All critical paths pass. Note: FastAPI does NOT auto-support HEAD on GET-only routes — if any future iteration needs HEAD on /api/* or /health, explicit @app.head decorators must be added. Demo creds for regression: mobile=9000000002 password=demo1234.",
+  "rca_of_issue": "N/A — this iteration is a forward-looking safety net, not a bug fix. The reported prod issue ('site can't be reached on other mobiles') is a stale deployment — the user needs to click Publish/Redeploy on https://buildmitra.emergent.host to pick up the iter-9 SPA fix. The iter-10 HEAD additions further harden the response so link-previewers (WhatsApp/iMessage/Facebook crawlers) that issue HEAD requests get proper 200 responses with text/html content-type."
+}
