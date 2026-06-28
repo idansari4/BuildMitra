@@ -1521,10 +1521,13 @@ async def app_healthz():
 @app.on_event("startup")
 async def on_start():
     """Run seed as a background task so startup completes immediately.
-    Kubernetes readiness/liveness probes won't time out due to slow Atlas
-    Mongo writes or bcrypt hashing during seed."""
+    A small delay ensures K8s liveness/readiness probes see the app as
+    healthy before any CPU-bound work begins. Seed also pushes bcrypt
+    hashes to a thread pool to avoid blocking the event loop."""
     async def _seed_safe():
         try:
+            # Let probes hit /health a few times first
+            await asyncio.sleep(2.0)
             await seed()
         except Exception as e:
             logger.exception("Seed failed (non-fatal, app continues): %s", e)
