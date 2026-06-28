@@ -1005,12 +1005,20 @@ async def payroll(month: Optional[str] = None, user=Depends(current_user)):
         by_worker[wid]["days_present"] += 1
         if a.get("job_id"): by_worker[wid]["jobs"].add(a["job_id"])
     out = []
+    worker_ids = list(by_worker.keys())
+    workers_map: dict = {}
+    if worker_ids:
+        workers_list = await db.users.find(
+            {"id": {"$in": worker_ids}},
+            {"_id": 0, "id": 1, "daily_wage": 1, "mobile": 1},
+        ).to_list(length=len(worker_ids))
+        workers_map = {w["id"]: w for w in workers_list}
     for wid, row in by_worker.items():
-        worker = await db.users.find_one({"id": wid}, {"_id": 0, "daily_wage": 1, "mobile": 1})
-        wage = (worker or {}).get("daily_wage", 0)
+        worker = workers_map.get(wid, {})
+        wage = worker.get("daily_wage", 0)
         out.append({
             "worker_id": wid, "worker_name": row["worker_name"],
-            "mobile": (worker or {}).get("mobile"),
+            "mobile": worker.get("mobile"),
             "days_present": row["days_present"],
             "daily_wage": wage,
             "total_wage": row["days_present"] * wage,
