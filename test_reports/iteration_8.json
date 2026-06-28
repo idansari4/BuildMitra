@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration-8 deployment fixes validated end-to-end. Created /app/backend/tests/test_deployment_fixes_iter8.py (26 new tests, all PASS). Full backend suite: 139/139 PASS in 103s. (1) Health endpoints — /api/health & /api/healthz via public ingress avg ~45ms p99 <200ms, root /health & /healthz via internal :8001 in 2-10ms; all return {status:'ok'} without DB. (2) Seed users — all 4 demo accounts (9000000000 admin, 9000000001 client, 9000000002 worker, 9000000003 contractor) login successfully after the 2s startup sleep + background seed. (3) Newly limited queries — /jobs/mine, /applications/mine, /applications/job/{id}, /erp/materials, /erp/tools, /erp/estimates, /erp/bills, /complaints/mine all return 200 with capped lists (200 / 500 / 100 respectively) and no Mongo _id leak. (4) PDF/Excel exports — created TEST_iter8 bill, GET /api/erp/bills/{bid}/pdf returns real %PDF- bytes (proof reportlab importable + functional), GET .../excel returns real PK\\x03\\x04 zip header (proof openpyxl importable + functional). (5) Twilio dev mode — POST /api/auth/otp/send returns {sent:true, dev_mode:true, dev_code:'123456'}, OTP verify with 123456 successfully logs in existing user (NO Twilio creds needed → import + module-level client init does not crash). (6) Razorpay dev mode — GET /api/payments/pricing returns razorpay_enabled:false (MOCKED — expected). (7) requirements.txt sanity — twilio, razorpay, reportlab, openpyxl, emergentintegrations, litellm (wheel URL), fastapi, motor, bcrypt all present. (8) No regression: password change roundtrip, profile photo set/clear, complaints file+list, payroll all green. NOTE: The earlier minor concern (root /health not exposed via public ingress) remains by design — K8s pod-level probes must hit containerPort 8001 directly or use /api/health via the ingress.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/health, /healthz (root)", "issue": "Still only reachable on internal port 8001; public ingress only routes /api/*. If a K8s probe is configured at the ingress/Service level (not pod containerPort), it must use /api/health (or /api/healthz). Carry-over note from iteration_7; not a new issue."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_deployment_fixes_iter8.py",
+    "/app/test_reports/pytest/iter8_deployment.xml",
+    "/app/test_reports/pytest/iter8_full_regression.xml"
+  ],
+  "action_items": [
+    "(Optional) Confirm deployment manifest probe path: pod-level probe → '/health' on containerPort 8001 (works, 2-10ms); ingress-level probe → must use '/api/health'.",
+    "(Tech debt, non-blocking) server.py is now 1541 lines — splitting into routers (auth/jobs/erp/admin/complaints/payroll/seed) would help long-term maintainability."
+  ],
+  "critical_code_review_comments": [
+    "Startup sequence (server.py:1521-1534) correctly (a) schedules seed via asyncio.create_task, (b) sleeps 2s so probes pass first, (c) wraps in try/except so an Atlas outage logs & continues instead of crashing. Reload/restart logs confirm 'Application startup complete' appears within ms.",
+    "All 8 newly-limited queries (jobs/mine, applications/mine, applications/job/{id}, erp/materials, erp/tools, erp/estimates, erp/bills, complaints/mine — server.py lines 620, 660, 668, 824, 847, 876, 905, 1281) consistently use .limit(N) + .to_list(length=N) which is correct motor pattern.",
+    "reportlab/openpyxl/twilio/razorpay all pinned to specific versions in requirements.txt (5.0.0 / 3.1.5 / 9.10.9 / 2.0.1) — exports tested and produce valid PDF/XLSX binary payloads.",
+    "Twilio client init is guarded by TWILIO_ENABLED flag (only constructed when creds present), so missing creds don't crash module import — verified by app booting and OTP dev path returning 200.",
+    "PDF/Excel endpoints stream base64-in-JSON which works but is ~33% larger than binary stream; consider returning StreamingResponse with proper Content-Type for large invoices later (non-blocking)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_deployment_fixes_iter8.py (new, 26 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (139/139 — 26 new iter-8 + 113 existing regression)",
+    "frontend": "N/A (backend-only as requested)"
+  },
+  "seed_data_creation": "Created one TEST_ bill (bill_to='TEST_Client Pvt Ltd', project='TEST_iter8 deployment', 2 items, ₹17,700 total incl. 18% GST) under the contractor demo to exercise PDF/Excel export endpoints. Safe to leave or purge.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "For deployment regression: rerun /app/backend/tests/test_deployment_fixes_iter8.py — it covers health, seed, limited queries, PDF/Excel exports, Twilio/Razorpay dev mode, requirements.txt sanity, plus core regressions (password / profile photo / complaints / payroll). Demo creds in /app/memory/test_credentials.md. Root /health is INTERNAL-only (use http://localhost:8001 or set INTERNAL_BACKEND_URL env var). Complaints field is 'description' not 'message'. Bills total = subtotal + subtotal*(tax_pct/100).",
+  "rca_of_issue": "Not a bug iteration — verification only. All three iteration-8 deployment-readiness fixes are working: (a) requirements.txt now contains every runtime dep (verified twilio, razorpay, reportlab, openpyxl, emergentintegrations, litellm wheel + 121 others), so a fresh pip install will not ImportError when /api/erp/bills/{id}/pdf, /excel, /payments/*, or /auth/otp/* are hit in production; (b) the 2-second asyncio.sleep before seed() gives K8s liveness/readiness probes a guaranteed window where /api/health responds without any DB activity, breaking the previous crash-loop where bcrypt-heavy seed blocked startup beyond the probe failure threshold; (c) the 8 newly added .limit() calls cap unbounded find() cursors at safe values (jobs/applications: 200, ERP collections: 500, complaints: 100), eliminating the risk of an event-loop-blocking large to_list() on Atlas as data grows. Combined with the still-active create_task wrapping of seed (iteration_7) and the no-DB health endpoints, the deployment-loop RCA is fully addressed."
+}
