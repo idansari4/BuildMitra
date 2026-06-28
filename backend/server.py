@@ -617,7 +617,7 @@ async def list_jobs(skill: Optional[str] = None, status: str = "open", limit: in
 
 @api.get("/jobs/mine")
 async def my_jobs(user=Depends(current_user)):
-    cursor = db.jobs.find({"posted_by": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    cursor = db.jobs.find({"posted_by": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(200)
     return await cursor.to_list(length=200)
 
 @api.get("/jobs/{job_id}")
@@ -657,7 +657,7 @@ async def apply(body: ApplyIn, user=Depends(current_user)):
 
 @api.get("/applications/mine")
 async def my_applications(user=Depends(current_user)):
-    cursor = db.applications.find({"worker_id": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    cursor = db.applications.find({"worker_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(200)
     return await cursor.to_list(length=200)
 
 @api.get("/applications/job/{job_id}")
@@ -665,7 +665,7 @@ async def job_applicants(job_id: str, user=Depends(current_user)):
     job = await db.jobs.find_one({"id": job_id})
     if not job or job["posted_by"] != user["id"]:
         raise HTTPException(403, "Not your job")
-    cursor = db.applications.find({"job_id": job_id}, {"_id": 0}).sort("created_at", -1)
+    cursor = db.applications.find({"job_id": job_id}, {"_id": 0}).sort("created_at", -1).limit(200)
     return await cursor.to_list(length=200)
 
 # --- Attendance ---
@@ -821,7 +821,7 @@ async def add_material(body: MaterialIn, user=Depends(contractor_user)):
 
 @api.get("/erp/materials")
 async def list_materials(user=Depends(contractor_user)):
-    cur = db.materials.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    cur = db.materials.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(500)
     return await cur.to_list(length=500)
 
 @api.put("/erp/materials/{mid}")
@@ -844,7 +844,7 @@ async def add_tool(body: ToolIn, user=Depends(contractor_user)):
 
 @api.get("/erp/tools")
 async def list_tools(user=Depends(contractor_user)):
-    cur = db.tools.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    cur = db.tools.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(500)
     return await cur.to_list(length=500)
 
 @api.put("/erp/tools/{tid}")
@@ -873,7 +873,7 @@ async def add_estimate(body: EstimateIn, user=Depends(contractor_user)):
 
 @api.get("/erp/estimates")
 async def list_estimates(user=Depends(contractor_user)):
-    cur = db.estimates.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    cur = db.estimates.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(500)
     return await cur.to_list(length=500)
 
 @api.delete("/erp/estimates/{eid}")
@@ -902,7 +902,7 @@ async def add_bill(body: BillIn, user=Depends(contractor_user)):
 
 @api.get("/erp/bills")
 async def list_bills(user=Depends(contractor_user)):
-    cur = db.bills.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    cur = db.bills.find({"owner": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(500)
     return await cur.to_list(length=500)
 
 @api.post("/erp/bills/{bid}/mark-paid")
@@ -1278,7 +1278,7 @@ async def file_complaint(body: ComplaintIn, user=Depends(current_user)):
 
 @api.get("/complaints/mine")
 async def my_complaints(user=Depends(current_user)):
-    cursor = db.complaints.find({"by_user_id": user["id"]}, {"_id": 0}).sort("created_at", -1)
+    cursor = db.complaints.find({"by_user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100)
     return await cursor.to_list(length=100)
 
 # --- Admin ---
