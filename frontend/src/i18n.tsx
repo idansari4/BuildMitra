@@ -162,6 +162,28 @@ const dict: Record<string, { en: string; hi: string }> = {
   "profile.updatePassword": { en: "Update Password", hi: "पासवर्ड अपडेट करें" },
   "profile.photoUpdated": { en: "Photo updated ✓", hi: "फोटो अपडेट हुई ✓" },
 
+  // Complaints
+  "complaints.title": { en: "Complaints", hi: "शिकायतें" },
+  "complaints.heroTitle": { en: "We're here to help", hi: "हम आपकी मदद के लिए हैं" },
+  "complaints.heroSub": { en: "File a complaint and our admin team will review it within 48 hours.", hi: "शिकायत दर्ज करें — हमारी टीम 48 घंटे में समीक्षा करेगी।" },
+  "complaints.empty": { en: "No complaints filed yet", hi: "अभी तक कोई शिकायत नहीं" },
+  "complaints.fileNew": { en: "File Complaint", hi: "शिकायत दर्ज करें" },
+  "complaints.category": { en: "Category", hi: "श्रेणी" },
+  "complaints.againstOptional": { en: "Against (optional)", hi: "किसके खिलाफ (वैकल्पिक)" },
+  "complaints.againstPh": { en: "Name of contractor / worker / client", hi: "ठेकेदार / श्रमिक / क्लाइंट का नाम" },
+  "complaints.subject": { en: "Subject", hi: "विषय" },
+  "complaints.subjectPh": { en: "Short summary of the issue", hi: "समस्या का संक्षिप्त सारांश" },
+  "complaints.description": { en: "Describe the issue", hi: "समस्या का विवरण" },
+  "complaints.descPh": { en: "Add details, dates, amounts etc. (min 10 chars)", hi: "विवरण, तिथियाँ, राशि आदि (न्यूनतम 10 अक्षर)" },
+  "complaints.submit": { en: "Submit Complaint", hi: "शिकायत भेजें" },
+  "complaints.filed": { en: "Complaint filed ✓", hi: "शिकायत दर्ज ✓" },
+  "complaints.errSubject": { en: "Subject is required", hi: "विषय आवश्यक है" },
+  "complaints.errDesc": { en: "Description must be at least 10 characters", hi: "विवरण कम से कम 10 अक्षर का हो" },
+  "complaints.adminNote": { en: "Admin response", hi: "एडमिन का उत्तर" },
+  "complaints.tip": { en: "Be specific and factual — false complaints may result in account suspension.", hi: "स्पष्ट और तथ्यात्मक रहें — झूठी शिकायत पर खाता निलंबित हो सकता है।" },
+  "complaints.helpSupport": { en: "Help & Support", hi: "सहायता और समर्थन" },
+  "complaints.helpSub": { en: "Report issues, payment disputes & more", hi: "समस्याएँ, भुगतान विवाद आदि रिपोर्ट करें" },
+
   // Job detail
   "job.about": { en: "About the work", hi: "काम के बारे में" },
   "job.postedBy": { en: "Posted by", hi: "द्वारा पोस्ट किया गया" },

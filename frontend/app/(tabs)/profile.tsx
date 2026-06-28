@@ -226,6 +226,15 @@ export default function Profile() {
 
         <H2 style={{ marginTop: spacing.md }}>{tr("profile.settings")}</H2>
 
+        <Pressable testID="help-support-link" onPress={() => router.push("/complaints" as any)} style={styles.payrollLink}>
+          <Ionicons name="help-buoy" size={22} color={colors.brand} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Body style={{ fontWeight: "700" }}>{tr("complaints.helpSupport")}</Body>
+            <Muted style={{ fontSize: 11 }}>{tr("complaints.helpSub")}</Muted>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+        </Pressable>
+
         <Pressable testID="change-password-link" onPress={() => setPwModal(true)} style={styles.payrollLink}>
           <Ionicons name="key" size={22} color={colors.brand} />
           <View style={{ flex: 1, marginLeft: 12 }}>

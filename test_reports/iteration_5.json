@@ -1,0 +1,63 @@
+{
+  "summary": "Complaints user-side UI tested end-to-end (Worker 9000000002). Backend pytest (9/9 PASS): POST /api/complaints, GET /api/complaints/mine, admin visibility, password & photo regressions. Frontend flow PASS: Profile → Help & Support → Complaints loads list with hero banner, status badges, dates. FAB opens modal; category chips, against/subject/desc fields with testIDs all render. Validations work (empty subject, desc < 10 chars). Successful submit shows 'Complaint filed ✓', modal auto-closes, list refreshes with new entry. Hindi i18n verified (title 'शिकायतें', FAB 'शिकायत दर्ज करें', status 'लंबित'). One real i18n bug found in the auto-prefixed description: `tr('complaints.against')` returns the literal key string because only `complaints.againstOptional` exists in the dict.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "complaints.tsx submit() description prefix",
+        "issue": "When user fills 'Against', the auto-prefixed description renders '[complaints.against: <name>]' literally because i18n key 'complaints.against' is NOT defined in /app/frontend/src/i18n.tsx (only 'complaints.againstOptional' exists). Visible in saved complaint card under Work Quality test entry. Reference: /app/frontend/app/complaints.tsx:76",
+        "testID": "complaint-desc",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "H2 / Body in src/ui.tsx",
+        "issue": "H2 component does not accept/forward testID prop, so testID='complaints-title' on Complaints header is not exposed to DOM (data-testid missing). Same likely affects other H2 usages in profile/admin. Minor — does not block users. Reference: /app/frontend/src/ui.tsx:79",
+        "testID": "complaints-title",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Unauthenticated access to /complaints",
+        "issue": "Direct navigation to /complaints without auth does NOT redirect to login. Page renders shell, API call returns 401, user sees empty list and 'Missing token' error on submit. Should redirect to /role-select or /(auth)/login when no token. Low priority (no data leak).",
+        "affected_testIDs": ["open-complaint"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "Console warnings (global)",
+        "issue": "'shadow*' style props deprecated — use 'boxShadow' (React Native Web). Also 'props.pointerEvents deprecated — use style.pointerEvents' and 'Image: style.resizeMode is deprecated, use props.resizeMode'. Not specific to complaints screen; coming from shared UI/theme components."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_complaints.py",
+    "/app/test_reports/pytest/complaints_results.xml"
+  ],
+  "action_items": [
+    "Add i18n key 'complaints.against' (en: 'Against', hi: 'के विरुद्ध' or similar) to /app/frontend/src/i18n.tsx — OR change /app/frontend/app/complaints.tsx:76 to use a hard-coded label instead of tr('complaints.against').",
+    "Optionally: add testID prop support to H2/H1/Body components in /app/frontend/src/ui.tsx so screen titles can be asserted by automated tests.",
+    "Optionally: add an auth-guard on /complaints route (redirect to login if no token) — at minimum surface a friendlier message than the raw 401 'Missing token'.",
+    "Optionally clean up [TEST]-prefixed complaints from MongoDB `complaints` collection (created 5 entries during this run). They are clearly tagged with [TEST]."
+  ],
+  "critical_code_review_comments": [
+    "complaints.tsx i18n usage on line 76 (`tr('complaints.against')`) silently falls back to the raw key — would be caught by an i18n lint that fails on missing keys.",
+    "H2/H1/Body components in ui.tsx drop testID/style props they receive; this makes UI testing of headers impossible and is an easy footgun."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_complaints.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 pytest)",
+    "frontend": "~95% (all flows work; 1 i18n bug + 1 minor missing testID)"
+  },
+  "seed_data_creation": "Created 5 [TEST]-prefixed complaints via backend tests + UI (worker 9000000002). Subject prefix '[TEST]' as instructed for easy identification. No DELETE endpoint exists.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Test credentials: Worker 9000000002 / demo1234. Backend Pydantic ComplaintIn requires subject (no min length on backend) and description (no min length on backend) — frontend enforces subject required & desc >= 10 chars. FAB and form testIDs all working. Hindi i18n fully wired except for missing 'complaints.against' key. Direct navigation to /complaints without auth currently renders the page shell but API 401s.",
+  "rca_of_issue": "i18n bug RCA: complaints.tsx:76 calls tr('complaints.against') but the i18n dict only defines 'complaints.againstOptional'. The fallback in i18n.tsx:276 returns the raw key when entry is undefined, so the user sees the literal '[complaints.against: <name>]' in the saved description. Fix: add { en: 'Against', hi: 'के विरुद्ध' } under key 'complaints.against' in i18n.tsx, or change the template to use the already-defined 'complaints.againstOptional' label."
+}
