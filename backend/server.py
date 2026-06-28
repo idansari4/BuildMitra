@@ -1539,3 +1539,49 @@ async def shutdown_db_client():
         client.close()
     except Exception:
         pass
+
+# -------------------------------------------------------------------
+# Serve Expo Web build (SPA) at root path.
+# This way the single FastAPI service serves both the frontend SPA
+# and the /api/* JSON endpoints — eliminating ingress routing issues
+# in production where only one port is exposed.
+# -------------------------------------------------------------------
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
+    logger.info("Mounting Expo web build from %s", FRONTEND_DIST)
+    # Mount static asset directories
+    if (FRONTEND_DIST / "_expo").exists():
+        app.mount("/_expo", StaticFiles(directory=str(FRONTEND_DIST / "_expo")), name="expo_static")
+    if (FRONTEND_DIST / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static_assets")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon():
+        f = FRONTEND_DIST / "favicon.ico"
+        return FileResponse(f) if f.exists() else JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    @app.get("/", include_in_schema=False)
+    async def spa_root():
+        return FileResponse(FRONTEND_DIST / "index.html")
+
+    # SPA catch-all: any non-API route returns index.html so client-side
+    # routing (expo-router) can take over. /api/* routes are matched
+    # first because they were included before this catch-all.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_catch_all(full_path: str):
+        # Don't intercept api routes (already matched), health endpoints,
+        # or static asset paths (already mounted).
+        if full_path.startswith(("api/", "api", "health", "healthz", "_expo/", "assets/")):
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        # Try to serve a real file if it exists in dist (for /metadata.json, etc.)
+        candidate = FRONTEND_DIST / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        # Otherwise fall back to SPA index
+        return FileResponse(FRONTEND_DIST / "index.html")
+else:
+    logger.warning("Expo web build not found at %s — frontend will not be served from backend.", FRONTEND_DIST)

@@ -6,7 +6,7 @@ node_modules/
 # Expo
 .expo/
 .metro-cache/
-dist/
+# dist/  <-- intentionally NOT ignored: contains Expo web build served by backend in production
 web-build/
 expo-env.d.ts
 
