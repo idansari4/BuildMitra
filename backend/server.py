@@ -237,12 +237,14 @@ async def root():
     return {"app": "BuildMitra", "ok": True}
 
 @api.get("/health")
+@api.head("/health")
 async def health():
     """Lightweight health check that does NOT touch DB.
     Used by Kubernetes liveness/readiness probes."""
     return {"status": "ok"}
 
 @api.get("/healthz")
+@api.head("/healthz")
 async def healthz():
     return {"status": "ok"}
 
