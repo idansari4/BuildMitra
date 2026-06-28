@@ -13,6 +13,7 @@ type Ctx = {
   user: User | null;
   loading: boolean;
   login: (mobile: string, password: string) => Promise<User>;
+  loginWithToken: (token: string, user: User) => Promise<User>;
   register: (b: { name: string; mobile: string; password: string; role: string }) => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -46,6 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return r.user as User;
   };
 
+  const loginWithToken = async (token: string, u: User) => {
+    await setToken(token);
+    setUser(u);
+    return u;
+  };
+
   const register = async (b: { name: string; mobile: string; password: string; role: string }) => {
     const r = await api.register(b);
     await setToken(r.token);
@@ -59,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, register, logout, refresh, setUser }}>
+    <AuthCtx.Provider value={{ user, loading, login, loginWithToken, register, logout, refresh, setUser }}>
       {children}
     </AuthCtx.Provider>
   );

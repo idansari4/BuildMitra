@@ -23,6 +23,18 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get('JWT_SECRET', 'dev')
 JWT_ALGO = os.environ.get('JWT_ALGO', 'HS256')
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+TWILIO_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_VERIFY = os.environ.get('TWILIO_VERIFY_SERVICE_SID', '')
+TWILIO_ENABLED = bool(TWILIO_SID and TWILIO_TOKEN and TWILIO_VERIFY)
+DEV_OTP_CODE = "123456"
+_twilio_client = None
+if TWILIO_ENABLED:
+    try:
+        from twilio.rest import Client as _TwilioClient
+        _twilio_client = _TwilioClient(TWILIO_SID, TWILIO_TOKEN)
+    except Exception as e:
+        TWILIO_ENABLED = False
 
 app = FastAPI(title="BuildMitra API")
 api = APIRouter(prefix="/api")
@@ -84,6 +96,19 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     mobile: str
     password: str
+
+class OtpSendIn(BaseModel):
+    mobile: str
+
+class OtpVerifyIn(BaseModel):
+    mobile: str
+    code: str
+    name: Optional[str] = None
+    role: Optional[str] = None  # required only on first signup
+    referred_by: Optional[str] = None
+
+class AadhaarIn(BaseModel):
+    aadhaar: str
 
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
@@ -247,6 +272,126 @@ async def login(body: LoginIn):
     user.pop("_id", None)
     user.pop("password", None)
     return {"token": token, "user": user}
+
+# --- Twilio OTP (with dev fallback when creds not configured) ---
+def _normalise_mobile(m: str) -> str:
+    digits = "".join(ch for ch in m if ch.isdigit())
+    if len(digits) == 12 and digits.startswith("91"):
+        return "+" + digits
+    if len(digits) == 10:
+        return "+91" + digits
+    raise HTTPException(400, "Invalid Indian mobile (10 digits)")
+
+@api.post("/auth/otp/send")
+async def otp_send(body: OtpSendIn):
+    e164 = _normalise_mobile(body.mobile)
+    if TWILIO_ENABLED and _twilio_client:
+        try:
+            _twilio_client.verify.v2.services(TWILIO_VERIFY).verifications.create(
+                to=e164, channel="sms"
+            )
+            return {"sent": True, "dev_mode": False, "mobile": e164}
+        except Exception as e:
+            logger.warning(f"Twilio send failed: {e}")
+            raise HTTPException(502, "Could not send OTP. Try again.")
+    # dev mode — always succeed, code is DEV_OTP_CODE
+    logger.info(f"[DEV OTP] {e164} → {DEV_OTP_CODE}")
+    return {"sent": True, "dev_mode": True, "mobile": e164, "dev_code": DEV_OTP_CODE}
+
+@api.post("/auth/otp/verify")
+async def otp_verify(body: OtpVerifyIn):
+    e164 = _normalise_mobile(body.mobile)
+    # 1) verify code
+    if TWILIO_ENABLED and _twilio_client:
+        try:
+            check = _twilio_client.verify.v2.services(TWILIO_VERIFY).verification_checks.create(
+                to=e164, code=body.code
+            )
+            if check.status != "approved":
+                raise HTTPException(401, "Invalid or expired OTP")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Twilio verify error: {e}")
+            raise HTTPException(401, "OTP verification failed")
+    else:
+        if body.code != DEV_OTP_CODE:
+            raise HTTPException(401, "Invalid OTP (dev mode: use 123456)")
+    # 2) get-or-create user (mobile stored without +91 for compatibility with demo accounts)
+    bare = e164.replace("+91", "")
+    user = await db.users.find_one({"mobile": bare})
+    if not user:
+        if not body.name or not body.role:
+            raise HTTPException(400, "name and role required for first OTP signup")
+        if body.role not in ("worker", "contractor", "client"):
+            raise HTTPException(400, "Invalid role")
+        uid = str(uuid.uuid4())
+        user = {
+            "id": uid, "name": body.name.strip(), "mobile": bare,
+            "password": hash_pw(uuid.uuid4().hex),  # random, never used
+            "role": body.role, "photo": None, "skills": [], "experience_years": 0,
+            "daily_wage": 0, "available": True, "city": "",
+            "company_name": "", "aadhaar_verified": False, "language": "en",
+            "rating_avg": 0.0, "rating_count": 0,
+            "referral_code": gen_referral_code(bare),
+            "referred_by": body.referred_by, "wallet_balance": 0,
+            "created_at": now_iso(),
+        }
+        await db.users.insert_one(user)
+        if body.referred_by:
+            ref = await db.users.find_one({"referral_code": body.referred_by})
+            if ref:
+                await db.users.update_one({"id": ref["id"]}, {"$inc": {"wallet_balance": 50}})
+                await db.wallet_txns.insert_one({
+                    "id": str(uuid.uuid4()), "user_id": ref["id"], "amount": 50,
+                    "type": "referral_credit", "note": f"Referral signup: {body.name}",
+                    "created_at": now_iso(),
+                })
+    if user.get("suspended"):
+        raise HTTPException(403, "Account suspended. Contact support.")
+    token = make_token(user["id"], user["role"])
+    user.pop("_id", None); user.pop("password", None)
+    return {"token": token, "user": user, "is_new_user": not user.get("aadhaar_verified")}
+
+# --- Aadhaar verify (Verhoeff checksum, mock for MVP) ---
+_VERHOEFF_D = [
+    [0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],
+    [3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],
+    [6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],[8,7,6,5,9,3,2,1,0,4],
+    [9,8,7,6,5,4,3,2,1,0],
+]
+_VERHOEFF_P = [
+    [0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],
+    [8,9,1,6,0,4,3,5,2,7],[9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],
+    [2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8],
+]
+
+def _aadhaar_valid(s: str) -> bool:
+    if not s.isdigit() or len(s) != 12 or s[0] in ("0", "1"):
+        return False
+    c = 0
+    for i, ch in enumerate(reversed(s)):
+        c = _VERHOEFF_D[c][_VERHOEFF_P[i % 8][int(ch)]]
+    return c == 0
+
+@api.post("/profile/aadhaar/verify")
+async def aadhaar_verify(body: AadhaarIn, user=Depends(current_user)):
+    aadhaar = "".join(ch for ch in body.aadhaar if ch.isdigit())
+    if not _aadhaar_valid(aadhaar):
+        raise HTTPException(400, "Invalid Aadhaar number")
+    # Check uniqueness
+    other = await db.users.find_one({"aadhaar_last4": aadhaar[-4:], "aadhaar_hash": hash_pw(aadhaar)[-30:], "id": {"$ne": user["id"]}})
+    if other:
+        raise HTTPException(400, "This Aadhaar is already linked to another account")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "aadhaar_verified": True,
+            "aadhaar_last4": aadhaar[-4:],
+            "aadhaar_verified_at": now_iso(),
+        }}
+    )
+    return {"verified": True, "last4": aadhaar[-4:]}
 
 @api.get("/me")
 async def me(user=Depends(current_user)):

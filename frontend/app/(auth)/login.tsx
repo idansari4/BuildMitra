@@ -78,6 +78,17 @@ export default function Login() {
             </Pressable>
           </View>
 
+          <Pressable
+            testID="goto-otp"
+            onPress={() => router.push({ pathname: "/(auth)/otp", params: { role: role || "worker" } } as any)}
+            style={styles.otpCta}
+          >
+            <Ionicons name="phone-portrait" size={20} color={colors.brand} />
+            <Body style={{ color: colors.brand, fontWeight: "800", marginLeft: 8 }}>
+              Login with Mobile OTP
+            </Body>
+          </Pressable>
+
           <Pressable testID="goto-register" onPress={() => router.push({ pathname: "/(auth)/register", params: { role: role || "worker" } } as any)}>
             <Body style={{ marginTop: spacing.lg, textAlign: "center", color: colors.onSurfaceSecondary }}>
               {t("auth.newHere")} <Body style={{ color: colors.brand, fontWeight: "700" }}>{t("auth.createAccount")}</Body>
@@ -93,6 +104,11 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
+  otpCta: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    marginTop: spacing.lg, padding: 14, borderRadius: 14,
+    borderWidth: 2, borderColor: colors.brand, backgroundColor: colors.brandTertiary,
+  },
   demoBox: {
     marginTop: spacing.lg, padding: spacing.md, borderRadius: 14,
     backgroundColor: colors.brandTertiary, gap: 8,
