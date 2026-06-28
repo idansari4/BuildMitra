@@ -3,6 +3,8 @@ import { View, StyleSheet, FlatList, Pressable, Modal, ScrollView, KeyboardAvoid
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { api } from "@/src/api";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card, Field, PrimaryButton, SecondaryButton } from "@/src/ui";
@@ -64,6 +66,32 @@ export default function Bills() {
     try { await Share.share({ message: msg }); } catch {}
   };
 
+  const downloadAndShare = async (id: string, kind: "pdf" | "excel") => {
+    try {
+      const r = kind === "pdf" ? await api.billPdf(id) : await api.billExcel(id);
+      const dir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      if (!dir) { return; }
+      const path = dir + r.filename;
+      await FileSystem.writeAsStringAsync(path, r.base64, { encoding: FileSystem.EncodingType.Base64 });
+      const can = await Sharing.isAvailableAsync();
+      if (can) {
+        await Sharing.shareAsync(path, {
+          mimeType: r.mime,
+          dialogTitle: `Share ${r.filename}`,
+          UTI: kind === "pdf" ? "com.adobe.pdf" : "org.openxmlformats.spreadsheetml.sheet",
+        });
+      } else if (Platform.OS === "web") {
+        // Web fallback: trigger browser download
+        const link = document.createElement("a");
+        link.href = `data:${r.mime};base64,${r.base64}`;
+        link.download = r.filename;
+        link.click();
+      }
+    } catch (e) {
+      console.warn("Export failed", e);
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={styles.header}>
@@ -116,16 +144,24 @@ export default function Bills() {
                 <Muted style={{ fontSize: 11 }}>{item.items.length} items</Muted>
               </View>
             </View>
-            <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
               {item.status !== "paid" && (
                 <Pressable testID={`paid-${item.id}`} onPress={() => markPaid(item.id)} style={[styles.actionBtn, { backgroundColor: colors.success }]}>
                   <Ionicons name="checkmark-circle" size={16} color="#FFF" />
                   <Body style={{ color: "#FFF", fontWeight: "700", fontSize: t.sm }}>Mark Paid</Body>
                 </Pressable>
               )}
+              <Pressable testID={`pdf-${item.id}`} onPress={() => downloadAndShare(item.id, "pdf")} style={[styles.actionBtn, { backgroundColor: colors.error }]}>
+                <Ionicons name="document-text" size={16} color="#FFF" />
+                <Body style={{ color: "#FFF", fontWeight: "700", fontSize: t.sm }}>PDF</Body>
+              </Pressable>
+              <Pressable testID={`excel-${item.id}`} onPress={() => downloadAndShare(item.id, "excel")} style={[styles.actionBtn, { backgroundColor: "#0F766E" }]}>
+                <Ionicons name="grid" size={16} color="#FFF" />
+                <Body style={{ color: "#FFF", fontWeight: "700", fontSize: t.sm }}>Excel</Body>
+              </Pressable>
               <Pressable testID={`share-${item.id}`} onPress={() => share(item)} style={[styles.actionBtn, { backgroundColor: colors.brand }]}>
-                <Ionicons name="share-social" size={16} color={colors.onBrandPrimary} />
-                <Body style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: t.sm }}>Share</Body>
+                <Ionicons name="logo-whatsapp" size={16} color={colors.onBrandPrimary} />
+                <Body style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: t.sm }}>WhatsApp</Body>
               </Pressable>
             </View>
           </Card>

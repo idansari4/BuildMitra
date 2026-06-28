@@ -90,4 +90,6 @@ export const api = {
   billAdd: (b: any) => req("POST", "/erp/bills", b),
   billPaid: (id: string) => req("POST", `/erp/bills/${id}/mark-paid`),
   billDel: (id: string) => req("DELETE", `/erp/bills/${id}`),
+  billPdf: (id: string) => req("GET", `/erp/bills/${id}/pdf`),
+  billExcel: (id: string) => req("GET", `/erp/bills/${id}/excel`),
 };
