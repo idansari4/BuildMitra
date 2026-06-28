@@ -185,6 +185,27 @@ const dict: Record<string, { en: string; hi: string }> = {
   "complaints.helpSupport": { en: "Help & Support", hi: "सहायता और समर्थन" },
   "complaints.helpSub": { en: "Report issues, payment disputes & more", hi: "समस्याएँ, भुगतान विवाद आदि रिपोर्ट करें" },
 
+  // Help & Support hub
+  "help.title": { en: "Help & Support", hi: "सहायता और समर्थन" },
+  "help.heroTitle": { en: "How can we help?", hi: "हम कैसे मदद कर सकते हैं?" },
+  "help.heroSub": { en: "Chat with us, browse FAQs, or file a complaint. We typically respond within 2 hours.", hi: "हमसे चैट करें, FAQs देखें, या शिकायत दर्ज करें। आमतौर पर 2 घंटे में जवाब।" },
+  "help.contactUs": { en: "Contact Us", hi: "संपर्क करें" },
+  "help.call": { en: "Call", hi: "कॉल करें" },
+  "help.supportHours": { en: "Support: Mon–Sat, 9 AM – 9 PM IST", hi: "सपोर्ट: सोम–शनि, 9 AM – 9 PM IST" },
+  "help.quickActions": { en: "Quick Actions", hi: "त्वरित कार्य" },
+  "help.fileComplaint": { en: "File a Complaint", hi: "शिकायत दर्ज करें" },
+  "help.fileComplaintSub": { en: "Against worker / contractor / payment", hi: "मजदूर / ठेकेदार / भुगतान के विरुद्ध" },
+  "help.reportBug": { en: "Report a Bug", hi: "बग रिपोर्ट करें" },
+  "help.reportBugSub": { en: "App crash, glitch, or feature not working", hi: "ऐप crash, गड़बड़, या फीचर काम नहीं कर रहा" },
+  "help.faqs": { en: "Frequently Asked Questions", hi: "अक्सर पूछे जाने वाले प्रश्न" },
+  "help.howToUse": { en: "How to Use BuildMitra", hi: "BuildMitra कैसे चलाएं" },
+  "help.about": { en: "About", hi: "ऐप के बारे में" },
+  "help.version": { en: "App Version", hi: "ऐप संस्करण" },
+  "help.terms": { en: "Terms of Service", hi: "सेवा की शर्तें" },
+  "help.privacy": { en: "Privacy Policy", hi: "गोपनीयता नीति" },
+  "help.madeWith": { en: "Made with ❤️ in India · © 2026 BuildMitra", hi: "भारत में ❤️ के साथ बनाया गया · © 2026 BuildMitra" },
+  "help.cannotOpen": { en: "Cannot open link", hi: "लिंक नहीं खुल सका" },
+
   // Job detail
   "job.about": { en: "About the work", hi: "काम के बारे में" },
   "job.postedBy": { en: "Posted by", hi: "द्वारा पोस्ट किया गया" },
