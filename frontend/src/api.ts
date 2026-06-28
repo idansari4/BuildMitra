@@ -92,4 +92,9 @@ export const api = {
   billDel: (id: string) => req("DELETE", `/erp/bills/${id}`),
   billPdf: (id: string) => req("GET", `/erp/bills/${id}/pdf`),
   billExcel: (id: string) => req("GET", `/erp/bills/${id}/excel`),
+  // Payments
+  paymentPricing: () => req("GET", "/payments/pricing"),
+  createOrder: (b: any) => req("POST", "/payments/create-order", b),
+  verifyPayment: (b: any) => req("POST", "/payments/verify", b),
+  paymentHistory: () => req("GET", "/payments/history"),
 };

@@ -4,8 +4,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
+import { useAuth } from "@/src/auth";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card } from "@/src/ui";
+import { PaymentSheet } from "@/src/payment-sheet";
 
 const BADGES = [
   { id: "bronze", title: "Bronze", min: 0, color: "#CD7F32", icon: "medal-outline" },
@@ -15,8 +17,11 @@ const BADGES = [
 
 export default function Wallet() {
   const [data, setData] = useState<any>({ balance: 0, referral_code: "", transactions: [] });
+  const [payAmount, setPayAmount] = useState<number | null>(null);
+  const { refresh } = useAuth();
 
-  useEffect(() => { (async () => { try { setData(await api.wallet()); } catch {} })(); }, []);
+  const reload = async () => { try { setData(await api.wallet()); } catch {} };
+  useEffect(() => { reload(); }, []);
 
   const share = async () => {
     try {
@@ -49,6 +54,22 @@ export default function Wallet() {
             </View>
           </View>
         </LinearGradient>
+
+        <H2 style={{ marginTop: spacing.md }}>Add Money</H2>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          {[100, 500, 1000].map((amt) => (
+            <Pressable
+              key={amt}
+              testID={`topup-${amt}`}
+              onPress={() => setPayAmount(amt)}
+              style={({ pressed }) => [styles.topupBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Ionicons name="add-circle" size={22} color={colors.brand} />
+              <Body style={{ fontWeight: "800", fontSize: t.lg, marginTop: 4 }}>₹{amt}</Body>
+              <Muted style={{ fontSize: 11 }}>via UPI</Muted>
+            </Pressable>
+          ))}
+        </View>
 
         <H2 style={{ marginTop: spacing.md }}>Your Badges</H2>
         <View style={{ flexDirection: "row", gap: 10 }}>
@@ -96,4 +117,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg,
   },
   badgeIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  topupBtn: {
+    flex: 1, alignItems: "center", padding: spacing.md,
+    backgroundColor: colors.brandTertiary, borderRadius: radius.lg,
+    borderWidth: 2, borderColor: colors.brand,
+  },
 });

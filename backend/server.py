@@ -36,6 +36,18 @@ if TWILIO_ENABLED:
     except Exception as e:
         TWILIO_ENABLED = False
 
+RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '')
+RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '')
+RAZORPAY_ENABLED = bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
+_rzp_client = None
+if RAZORPAY_ENABLED:
+    try:
+        import razorpay as _rzp
+        _rzp_client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    except Exception:
+        RAZORPAY_ENABLED = False
+
 app = FastAPI(title="BuildMitra API")
 api = APIRouter(prefix="/api")
 
@@ -109,6 +121,16 @@ class OtpVerifyIn(BaseModel):
 
 class AadhaarIn(BaseModel):
     aadhaar: str
+
+# Payments
+class OrderIn(BaseModel):
+    amount_inr: int  # rupees, will multiply by 100 internally
+    purpose: str  # wallet_topup | erp_pro | erp_enterprise
+
+class VerifyIn(BaseModel):
+    order_id: str
+    payment_id: Optional[str] = None
+    signature: Optional[str] = None
 
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
@@ -352,6 +374,133 @@ async def otp_verify(body: OtpVerifyIn):
     token = make_token(user["id"], user["role"])
     user.pop("_id", None); user.pop("password", None)
     return {"token": token, "user": user, "is_new_user": not user.get("aadhaar_verified")}
+
+# --- Payments (Razorpay + dev mode fallback) ---
+PRICING = {
+    "erp_pro": 299,
+    "erp_enterprise": 999,
+}
+
+def _apply_purpose(user: dict, purpose: str, amount_inr: int):
+    """Returns dict of updates to apply to user after successful payment."""
+    updates = {}
+    txn_note = ""
+    if purpose == "wallet_topup":
+        updates["$inc"] = {"wallet_balance": amount_inr}
+        txn_note = f"Wallet top-up ₹{amount_inr}"
+    elif purpose in ("erp_pro", "erp_enterprise"):
+        tier = "pro" if purpose == "erp_pro" else "enterprise"
+        expires = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        updates["$set"] = {
+            "subscription_tier": tier,
+            "subscription_expires_at": expires,
+        }
+        txn_note = f"ERP {tier.title()} subscription (30 days)"
+    return updates, txn_note
+
+@api.post("/payments/create-order")
+async def create_order(body: OrderIn, user=Depends(current_user)):
+    if body.purpose not in ("wallet_topup", "erp_pro", "erp_enterprise"):
+        raise HTTPException(400, "Invalid purpose")
+    if body.purpose == "erp_pro" and user["role"] != "contractor":
+        raise HTTPException(403, "ERP subscription is for contractors only")
+    if body.purpose == "erp_enterprise" and user["role"] != "contractor":
+        raise HTTPException(403, "ERP subscription is for contractors only")
+    # Force fixed pricing for subscription
+    if body.purpose in PRICING:
+        amount_inr = PRICING[body.purpose]
+    else:
+        amount_inr = max(1, int(body.amount_inr))
+    amount_paise = amount_inr * 100
+
+    order_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "purpose": body.purpose,
+        "amount_inr": amount_inr,
+        "amount_paise": amount_paise,
+        "status": "created",
+        "dev_mode": not RAZORPAY_ENABLED,
+        "created_at": now_iso(),
+    }
+    if RAZORPAY_ENABLED and _rzp_client:
+        try:
+            rzp_order = _rzp_client.order.create({
+                "amount": amount_paise,
+                "currency": "INR",
+                "payment_capture": 1,
+                "notes": {"purpose": body.purpose, "user_id": user["id"]},
+            })
+            order_doc["razorpay_order_id"] = rzp_order["id"]
+        except Exception as e:
+            logger.warning(f"Razorpay order failed: {e}")
+            raise HTTPException(502, "Could not create payment order")
+    else:
+        order_doc["razorpay_order_id"] = f"order_DEV_{order_doc['id'][:8]}"
+
+    await db.payment_orders.insert_one(order_doc)
+    order_doc.pop("_id", None)
+    return {
+        "order_id": order_doc["id"],
+        "razorpay_order_id": order_doc["razorpay_order_id"],
+        "amount_inr": amount_inr,
+        "amount_paise": amount_paise,
+        "key_id": RAZORPAY_KEY_ID,
+        "dev_mode": order_doc["dev_mode"],
+        "purpose": body.purpose,
+    }
+
+@api.post("/payments/verify")
+async def verify_payment(body: VerifyIn, user=Depends(current_user)):
+    order = await db.payment_orders.find_one({"id": body.order_id, "user_id": user["id"]})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order["status"] == "paid":
+        return {"ok": True, "already_paid": True}
+    # Verify signature with Razorpay in prod
+    if RAZORPAY_ENABLED and _rzp_client and order.get("razorpay_order_id", "").startswith("order_") and not order["dev_mode"]:
+        try:
+            _rzp_client.utility.verify_payment_signature({
+                "razorpay_order_id": order["razorpay_order_id"],
+                "razorpay_payment_id": body.payment_id or "",
+                "razorpay_signature": body.signature or "",
+            })
+        except Exception as e:
+            logger.warning(f"Signature verify failed: {e}")
+            raise HTTPException(400, "Invalid payment signature")
+    # Apply purpose
+    updates, note = _apply_purpose(user, order["purpose"], order["amount_inr"])
+    if updates:
+        await db.users.update_one({"id": user["id"]}, updates)
+    await db.payment_orders.update_one(
+        {"id": body.order_id},
+        {"$set": {"status": "paid", "payment_id": body.payment_id, "paid_at": now_iso()}}
+    )
+    await db.wallet_txns.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "amount": order["amount_inr"] if order["purpose"] == "wallet_topup" else -order["amount_inr"],
+        "type": order["purpose"],
+        "note": note,
+        "created_at": now_iso(),
+    })
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    return {"ok": True, "purpose": order["purpose"], "user": fresh}
+
+@api.get("/payments/history")
+async def payment_history(user=Depends(current_user)):
+    cur = db.payment_orders.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(50)
+    return await cur.to_list(length=50)
+
+@api.get("/payments/pricing")
+async def pricing():
+    return {
+        "erp_pro": {"amount_inr": PRICING["erp_pro"], "label": "ERP Pro", "duration_days": 30,
+                    "features": ["Unlimited bills", "PDF/Excel exports", "Multi-site inventory", "Priority support"]},
+        "erp_enterprise": {"amount_inr": PRICING["erp_enterprise"], "label": "ERP Enterprise", "duration_days": 30,
+                           "features": ["All Pro features", "AI material forecasting", "Custom invoice branding", "Dedicated CSM"]},
+        "razorpay_enabled": RAZORPAY_ENABLED,
+    }
 
 # --- Aadhaar verify (Verhoeff checksum, mock for MVP) ---
 _VERHOEFF_D = [
