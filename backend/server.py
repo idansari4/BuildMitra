@@ -227,6 +227,10 @@ class RatingIn(BaseModel):
     stars: int
     comment: Optional[str] = ""
 
+class PasswordChangeIn(BaseModel):
+    old_password: str
+    new_password: str
+
 # ---------- routes ----------
 @api.get("/")
 async def root():
@@ -558,6 +562,21 @@ async def update_me(body: ProfileUpdate, user=Depends(current_user)):
         await db.users.update_one({"id": user["id"]}, {"$set": update})
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
     return updated
+
+@api.put("/me/password")
+async def change_password(body: PasswordChangeIn, user=Depends(current_user)):
+    if not body.old_password or not body.new_password:
+        raise HTTPException(400, "Old and new password required")
+    if len(body.new_password) < 4:
+        raise HTTPException(400, "New password must be at least 4 characters")
+    fresh = await db.users.find_one({"id": user["id"]})
+    if not fresh or not verify_pw(body.old_password, fresh.get("password", "")):
+        raise HTTPException(401, "Old password is incorrect")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password": hash_pw(body.new_password), "password_updated_at": now_iso()}}
+    )
+    return {"ok": True, "message": "Password updated"}
 
 # --- Jobs ---
 @api.post("/jobs")

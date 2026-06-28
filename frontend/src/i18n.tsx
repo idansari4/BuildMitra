@@ -150,6 +150,17 @@ const dict: Record<string, { en: string; hi: string }> = {
   "profile.language": { en: "Language", hi: "भाषा" },
   "profile.aadhaar": { en: "Aadhaar", hi: "आधार" },
   "profile.whatsapp": { en: "WhatsApp Support", hi: "WhatsApp सपोर्ट" },
+  "profile.changePassword": { en: "Change Password", hi: "पासवर्ड बदलें" },
+  "profile.changePhoto": { en: "Change Photo", hi: "फोटो बदलें" },
+  "profile.removePhoto": { en: "Remove Photo", hi: "फोटो हटाएं" },
+  "profile.oldPassword": { en: "Old Password", hi: "पुराना पासवर्ड" },
+  "profile.newPassword": { en: "New Password", hi: "नया पासवर्ड" },
+  "profile.confirmPassword": { en: "Confirm New Password", hi: "नया पासवर्ड दोबारा लिखें" },
+  "profile.passwordMismatch": { en: "Passwords do not match", hi: "पासवर्ड मेल नहीं खाते" },
+  "profile.passwordShort": { en: "Password must be at least 4 characters", hi: "पासवर्ड कम से कम 4 अक्षर का हो" },
+  "profile.passwordUpdated": { en: "Password updated ✓", hi: "पासवर्ड अपडेट हुआ ✓" },
+  "profile.updatePassword": { en: "Update Password", hi: "पासवर्ड अपडेट करें" },
+  "profile.photoUpdated": { en: "Photo updated ✓", hi: "फोटो अपडेट हुई ✓" },
 
   // Job detail
   "job.about": { en: "About the work", hi: "काम के बारे में" },

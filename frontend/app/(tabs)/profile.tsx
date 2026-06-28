@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Image, Alert, ActionSheetIOS } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
@@ -25,6 +26,20 @@ export default function Profile() {
   const [aadhaar, setAadhaar] = useState("");
   const [aadhaarBusy, setAadhaarBusy] = useState(false);
   const [aadhaarErr, setAadhaarErr] = useState("");
+
+  // Password change modal state
+  const [pwModal, setPwModal] = useState(false);
+  const [oldPw, setOldPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwErr, setPwErr] = useState("");
+  const [pwMsg, setPwMsg] = useState("");
+
+  // Photo upload state
+  const [photoBusy, setPhotoBusy] = useState(false);
+
+  const photo: string | undefined = (user as any)?.photo;
 
   const verifyAadhaar = async () => {
     setAadhaarErr("");
@@ -58,9 +73,100 @@ export default function Profile() {
         company_name: company,
       });
       await refresh();
-      setMsg("Saved ✓");
-    } catch (e: any) { setMsg(e?.message || "Failed"); }
+      setMsg(tr("common.saved"));
+    } catch (e: any) { setMsg(e?.message || tr("common.failed")); }
     finally { setBusy(false); }
+  };
+
+  const pickPhoto = async (source: "library" | "camera") => {
+    setMsg("");
+    try {
+      if (source === "camera") {
+        const cam = await ImagePicker.requestCameraPermissionsAsync();
+        if (cam.status !== "granted") { setMsg("Camera permission denied"); return; }
+      } else {
+        const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (lib.status !== "granted") { setMsg("Gallery permission denied"); return; }
+      }
+      const opts: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        base64: true, quality: 0.5, allowsEditing: true, aspect: [1, 1],
+      };
+      const res = source === "camera"
+        ? await ImagePicker.launchCameraAsync({ ...opts, cameraType: ImagePicker.CameraType.front })
+        : await ImagePicker.launchImageLibraryAsync(opts);
+      if (res.canceled || !res.assets?.[0]?.base64) return;
+      setPhotoBusy(true);
+      const dataUrl = "data:image/jpeg;base64," + res.assets[0].base64;
+      await api.updateMe({ photo: dataUrl });
+      await refresh();
+      setMsg(tr("profile.photoUpdated"));
+    } catch (e: any) {
+      setMsg(e?.message || tr("common.failed"));
+    } finally { setPhotoBusy(false); }
+  };
+
+  const removePhoto = async () => {
+    setPhotoBusy(true); setMsg("");
+    try {
+      await api.updateMe({ photo: "" });
+      await refresh();
+      setMsg(tr("common.saved"));
+    } catch (e: any) {
+      setMsg(e?.message || tr("common.failed"));
+    } finally { setPhotoBusy(false); }
+  };
+
+  const onAvatarPress = () => {
+    const options: string[] = [
+      tr("profile.changePhoto") + " (Camera)",
+      tr("profile.changePhoto") + " (Gallery)",
+    ];
+    if (photo) options.push(tr("profile.removePhoto"));
+    options.push(tr("common.cancel"));
+    const cancelIdx = options.length - 1;
+    const destIdx = photo ? options.length - 2 : -1;
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex: cancelIdx, destructiveButtonIndex: destIdx },
+        (idx) => {
+          if (idx === 0) pickPhoto("camera");
+          else if (idx === 1) pickPhoto("library");
+          else if (photo && idx === destIdx) removePhoto();
+        }
+      );
+    } else {
+      // Android - use Alert
+      const buttons: any[] = [
+        { text: tr("profile.changePhoto") + " (Camera)", onPress: () => pickPhoto("camera") },
+        { text: tr("profile.changePhoto") + " (Gallery)", onPress: () => pickPhoto("library") },
+      ];
+      if (photo) buttons.push({ text: tr("profile.removePhoto"), style: "destructive", onPress: removePhoto });
+      buttons.push({ text: tr("common.cancel"), style: "cancel" });
+      Alert.alert(tr("profile.changePhoto"), undefined, buttons);
+    }
+  };
+
+  const submitPassword = async () => {
+    setPwErr(""); setPwMsg("");
+    if (!oldPw || !newPw || !confirmPw) { setPwErr("All fields required"); return; }
+    if (newPw.length < 4) { setPwErr(tr("profile.passwordShort")); return; }
+    if (newPw !== confirmPw) { setPwErr(tr("profile.passwordMismatch")); return; }
+    setPwBusy(true);
+    try {
+      await api.changePassword(oldPw, newPw);
+      setPwMsg(tr("profile.passwordUpdated"));
+      setOldPw(""); setNewPw(""); setConfirmPw("");
+      setTimeout(() => { setPwModal(false); setPwMsg(""); }, 1200);
+    } catch (e: any) {
+      setPwErr(e?.message || tr("common.failed"));
+    } finally { setPwBusy(false); }
+  };
+
+  const closePwModal = () => {
+    setPwModal(false);
+    setOldPw(""); setNewPw(""); setConfirmPw(""); setPwErr(""); setPwMsg("");
   };
 
   const onLogout = async () => { await logout(); router.replace("/role-select"); };
@@ -69,18 +175,27 @@ export default function Profile() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 100, gap: spacing.md }}>
         <View style={styles.head}>
-          <View style={styles.avatar}>
-            <Body style={{ fontSize: 32, fontWeight: "800", color: colors.onBrandPrimary }}>
-              {user?.name?.[0]?.toUpperCase() || "U"}
-            </Body>
-          </View>
+          <Pressable testID="avatar-edit" onPress={onAvatarPress} style={styles.avatarWrap} disabled={photoBusy}>
+            {photo ? (
+              <Image source={{ uri: photo }} style={styles.avatarImg} />
+            ) : (
+              <View style={styles.avatar}>
+                <Body style={{ fontSize: 32, fontWeight: "800", color: colors.onBrandPrimary }}>
+                  {user?.name?.[0]?.toUpperCase() || "U"}
+                </Body>
+              </View>
+            )}
+            <View style={styles.cameraBadge}>
+              <Ionicons name={photoBusy ? "hourglass" : "camera"} size={14} color={colors.onBrandPrimary} />
+            </View>
+          </Pressable>
           <View style={{ flex: 1 }}>
             <H1 style={{ fontSize: t.xl }} testID="profile-name">{user?.name}</H1>
             <Muted>{String(user?.role).toUpperCase()} · {user?.mobile}</Muted>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
               <Ionicons name="star" size={14} color={colors.brand} />
               <Body style={{ fontWeight: "700" }}>{user?.rating_avg?.toFixed(1) || "0.0"}</Body>
-              <Muted>({user?.rating_count || 0} reviews)</Muted>
+              <Muted>({user?.rating_count || 0} {tr("common.reviews")})</Muted>
             </View>
           </View>
         </View>
@@ -110,6 +225,16 @@ export default function Profile() {
         <PrimaryButton testID="save-profile" label={tr("profile.save")} icon="checkmark-circle-outline" loading={busy} onPress={save} />
 
         <H2 style={{ marginTop: spacing.md }}>{tr("profile.settings")}</H2>
+
+        <Pressable testID="change-password-link" onPress={() => setPwModal(true)} style={styles.payrollLink}>
+          <Ionicons name="key" size={22} color={colors.brand} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Body style={{ fontWeight: "700" }}>{tr("profile.changePassword")}</Body>
+            <Muted style={{ fontSize: 11 }}>Update your account password</Muted>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+        </Pressable>
+
         {(user?.role === "contractor" || user?.role === "client") && (
           <Pressable testID="payroll-link" onPress={() => router.push("/payroll" as any)} style={styles.payrollLink}>
             <Ionicons name="cash" size={22} color={colors.brand} />
@@ -151,6 +276,7 @@ export default function Profile() {
         <SecondaryButton testID="logout-button" label={tr("common.logout")} onPress={onLogout} />
       </ScrollView>
 
+      {/* Aadhaar Modal */}
       <Modal visible={aadhaarModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAadhaarModal(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
@@ -191,6 +317,65 @@ export default function Profile() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
+
+      {/* Password Change Modal */}
+      <Modal visible={pwModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={closePwModal}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+            <View style={styles.modalHead}>
+              <Pressable testID="close-password" onPress={closePwModal}>
+                <Ionicons name="close" size={26} color={colors.onSurface} />
+              </Pressable>
+              <H2>{tr("profile.changePassword")}</H2>
+              <View style={{ width: 26 }} />
+            </View>
+            <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120, gap: spacing.md }} keyboardShouldPersistTaps="handled">
+              <View style={styles.aadhaarHero}>
+                <Ionicons name="key" size={48} color={colors.brand} />
+                <H2 style={{ marginTop: spacing.md }}>{tr("profile.changePassword")}</H2>
+                <Muted style={{ marginTop: 6, textAlign: "center" }}>
+                  Choose a strong password with at least 4 characters.
+                </Muted>
+              </View>
+              <Field
+                testID="old-password"
+                label={tr("profile.oldPassword")}
+                value={oldPw}
+                onChangeText={setOldPw}
+                secureTextEntry
+                placeholder="••••••••"
+              />
+              <Field
+                testID="new-password"
+                label={tr("profile.newPassword")}
+                value={newPw}
+                onChangeText={setNewPw}
+                secureTextEntry
+                placeholder="••••••••"
+              />
+              <Field
+                testID="confirm-password"
+                label={tr("profile.confirmPassword")}
+                value={confirmPw}
+                onChangeText={setConfirmPw}
+                secureTextEntry
+                placeholder="••••••••"
+              />
+              {pwErr ? <Body style={{ color: colors.error }}>{pwErr}</Body> : null}
+              {pwMsg ? <Body style={{ color: colors.success, fontWeight: "700" }}>{pwMsg}</Body> : null}
+            </ScrollView>
+            <View style={styles.modalCta}>
+              <PrimaryButton
+                testID="submit-password"
+                label={tr("profile.updatePassword")}
+                icon="checkmark-circle"
+                loading={pwBusy}
+                onPress={submitPassword}
+              />
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -209,9 +394,17 @@ function Row({ icon, label, value }: { icon: any; label: string; value: string }
 
 const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.sm },
+  avatarWrap: { width: 72, height: 72, position: "relative" },
   avatar: {
     width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brand,
     alignItems: "center", justifyContent: "center",
+  },
+  avatarImg: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brandTertiary },
+  cameraBadge: {
+    position: "absolute", bottom: 0, right: 0,
+    width: 26, height: 26, borderRadius: 13, backgroundColor: colors.brand,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: colors.surface,
   },
   row: {
     flexDirection: "row", alignItems: "center",

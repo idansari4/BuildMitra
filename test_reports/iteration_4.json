@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 4 — Backend-only test of new password-change endpoint (PUT /api/me/password) and profile-photo update via PUT /api/me. 21/21 pytest cases pass (100%). Password change: rejects missing auth (401), invalid token (401), empty old/new (400 'Old and new password required'), missing required key (422 from Pydantic), short new password <4 chars (400 'New password must be at least 4 characters'), wrong old (401 'Old password is incorrect'); success returns {ok:true, message:'Password updated'} and persists `password_updated_at` (visible via GET /api/me, password itself is stripped). After change, login with new password works and old password is rejected (401 Invalid credentials). Photo update: setting data:image/jpeg;base64 string persists on user doc and returns via GET /me; sending photo:'' correctly clears (stored as empty string); other ProfileUpdate fields (skills, city, daily_wage, experience_years, available, language) still update correctly and partial updates (only name) leave other fields intact (regression OK). Existing endpoints unaffected: POST /api/auth/login works for worker/client/contractor (role-correct, password stripped from response), GET /api/me returns full user incl. id/mobile/role/referral_code/wallet_balance, PUT /api/me with full ProfileUpdate body still saves all fields. Worker password reverted back to demo1234 and seed profile fields (name='Ramesh Kumar', skills=['Mason','Tile Worker'], city='Mumbai', daily_wage=800, exp=6, lang='en') restored via /tmp/restore_worker.py — demo flow & subsequent runs unaffected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_password_profile.py",
+    "/app/test_reports/pytest/password_profile_results.xml"
+  ],
+  "action_items": [
+    "(Optional) UI/data nit: clearing photo via PUT /api/me {photo:''} stores empty string '', while seeded users have photo:null. Two empty representations now coexist. Frontend should treat both '' and null/undefined as 'no photo' when rendering avatars. Consider normalising to None on backend when photo == '' (server.py:560).",
+    "(Optional, defensive) PUT /api/me currently does not enforce a max length on the base64 photo string. A very large base64 (e.g. 5MB+) would be written straight to MongoDB. Consider rejecting payloads above ~2MB and/or instructing the frontend to resize/compress before upload."
+  ],
+  "critical_code_review_comments": [
+    "PUT /api/me/password (server.py:566-579) — clean implementation: pulls fresh user from db, validates with bcrypt.verify_pw, sets password_updated_at via now_iso(), returns deterministic {ok, message}. Auth enforced via current_user dependency (401 on missing/invalid Bearer). No regression on /api/me which still strips password & _id.",
+    "ProfileUpdate.photo is Optional[str]; PUT /api/me filter `v is not None` means photo:None is a no-op (correct — keeps existing). photo:'' falls through and is persisted as '' (intentional clear). Tested both paths.",
+    "current_user dep returns 401 (not 403) on missing/invalid token — consistent across me, me/password, me PUT. Matches spec ('without token returns 401/403').",
+    "Login response strips both _id and password (server.py:303-304). GET /me strips them via projection {'_id':0,'password':0} (server.py:92). No password leak verified in tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_password_profile.py (new)"
+  ],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "n/a (not tested per request)"},
+  "seed_data_creation": "No persistent test data. Worker 9000000002 password was changed temporarily and reverted to demo1234. Profile fields (name/skills/city/wage/exp/lang/photo) were restored to seed defaults via /tmp/restore_worker.py. Only residual diff: photo field is '' (empty string) instead of original None — purely cosmetic, both render as 'no photo'.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Worker (9000000002/demo1234) is used as primary test subject in /app/backend/tests/test_password_profile.py. Tests are idempotent — revert-step at end of TestPasswordChange ensures password returns to demo1234 even if re-run. If you change password tests, keep the revert step. EXPO_PUBLIC_BACKEND_URL is read from env with a hardcoded fallback to the preview URL — confirmed working. All 21 cases pass against the public preview URL.",
+  "rca_of_issue": "N/A — no bugs found. All 21 edge cases (auth guards, validation 400s, 401 wrong old pw, success path, password_updated_at persistence, login-after-change, old-rejected, photo set+clear, multi-field regression, partial update, existing endpoints) returned the expected behaviour."
+}

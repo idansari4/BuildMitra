@@ -40,6 +40,7 @@ export const api = {
   aadhaarVerify: (aadhaar: string) => req("POST", "/profile/aadhaar/verify", { aadhaar }),
   me: () => req("GET", "/me"),
   updateMe: (b: any) => req("PUT", "/me", b),
+  changePassword: (old_password: string, new_password: string) => req("PUT", "/me/password", { old_password, new_password }),
   skills: () => req("GET", "/skills"),
   jobs: (skill?: string) => req("GET", `/jobs${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`),
   job: (id: string) => req("GET", `/jobs/${id}`),
