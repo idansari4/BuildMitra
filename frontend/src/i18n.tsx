@@ -169,6 +169,7 @@ const dict: Record<string, { en: string; hi: string }> = {
   "complaints.empty": { en: "No complaints filed yet", hi: "अभी तक कोई शिकायत नहीं" },
   "complaints.fileNew": { en: "File Complaint", hi: "शिकायत दर्ज करें" },
   "complaints.category": { en: "Category", hi: "श्रेणी" },
+  "complaints.against": { en: "Against", hi: "के विरुद्ध" },
   "complaints.againstOptional": { en: "Against (optional)", hi: "किसके खिलाफ (वैकल्पिक)" },
   "complaints.againstPh": { en: "Name of contractor / worker / client", hi: "ठेकेदार / श्रमिक / क्लाइंट का नाम" },
   "complaints.subject": { en: "Subject", hi: "विषय" },
