@@ -236,6 +236,16 @@ class PasswordChangeIn(BaseModel):
 async def root():
     return {"app": "BuildMitra", "ok": True}
 
+@api.get("/health")
+async def health():
+    """Lightweight health check that does NOT touch DB.
+    Used by Kubernetes liveness/readiness probes."""
+    return {"status": "ok"}
+
+@api.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
 @api.get("/skills")
 async def skills():
     return {"skills": SKILLS}
@@ -1382,7 +1392,12 @@ async def admin_reject_complaint(cid: str, note: Optional[str] = "", _=Depends(a
 
 # --- Seed ---
 async def seed():
-    if await db.users.count_documents({"role": "client"}) > 0:
+    try:
+        existing = await db.users.count_documents({"role": "client"})
+    except Exception as e:
+        logger.warning("Seed: cannot check users (Mongo unavailable?): %s", e)
+        return
+    if existing > 0:
         return
     logger.info("Seeding demo data...")
     demo_client = {
@@ -1493,10 +1508,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Root-level health endpoints (NOT under /api) for K8s probes that
+# hit non-prefixed paths.
+@app.get("/health")
+async def app_health():
+    return {"status": "ok"}
+
+@app.get("/healthz")
+async def app_healthz():
+    return {"status": "ok"}
+
 @app.on_event("startup")
 async def on_start():
-    await seed()
+    """Run seed as a background task so startup completes immediately.
+    Kubernetes readiness/liveness probes won't time out due to slow Atlas
+    Mongo writes or bcrypt hashing during seed."""
+    async def _seed_safe():
+        try:
+            await seed()
+        except Exception as e:
+            logger.exception("Seed failed (non-fatal, app continues): %s", e)
+    asyncio.create_task(_seed_safe())
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    try:
+        client.close()
+    except Exception:
+        pass

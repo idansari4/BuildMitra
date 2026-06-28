@@ -1,0 +1,41 @@
+{
+  "summary": "Backend deployment-fix validated. Created /app/backend/tests/test_health_and_regression.py (19 new tests, all PASS). Verified: (1) GET /api/health, /api/healthz, /api/ all return 200 {status:'ok'} via public ingress (avg 45-126ms); (2) Root-level /health and /healthz return 200 {status:'ok'} on internal backend port 8001 (2-42ms) — public ingress only routes /api/* to backend so root paths are unreachable externally (expected, K8s pod probes hit containerPort directly); (3) Light load: 50 sequential hits avg 45.2ms p95 48.8ms 0 failures; 50 concurrent (20 workers) 50/50 OK in 1.42s; (4) All 4 demo seed users (9000000000 admin, 9000000001 client, 9000000002 worker, 9000000003 contractor) log in successfully — background seed completed; (5) Regression: /api/auth/login, GET /api/me, PUT /api/me/password (full roundtrip + wrong-old rejection), POST /api/complaints, GET /api/complaints/mine, GET /api/payroll (contractor/client/admin), payroll 403 for worker — all green. Also re-ran full existing suite: 43/43 PASS in test_buildmitra.py + test_password_profile.py + test_complaints.py. Total 62/62 backend tests passing. No regressions detected from the startup/seed-as-background-task fix.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/health, /healthz (root level)", "issue": "Root-level health endpoints exist on the backend (verified on http://localhost:8001) but are NOT exposed through the public ingress — only /api/* is routed to backend. This is fine for K8s pod-level liveness/readiness probes (which hit containerPort 8001 directly), but if any probe is configured at the ingress/service level using a root path, it will hit Expo and return HTML. Recommend confirming the deployment manifest probe path matches: use containerPort + path '/health' (pod-level) OR switch probe path to '/api/health' if it goes through the ingress."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_health_and_regression.py",
+    "/app/test_reports/pytest/health_regression.xml",
+    "/app/test_reports/pytest/regression_full.xml"
+  ],
+  "action_items": [
+    "(Optional, deployment-side) Verify the K8s liveness/readiness probe path in the deployment manifest. If probes hit the pod containerPort directly, '/health' or '/healthz' both work fine (2-42ms). If probes traverse the ingress, switch to '/api/health' since the ingress only forwards /api/* to the backend.",
+    "(Nice-to-have) Add a small log line at the end of seed() like logger.info('Seed complete') so deployment logs make it easy to confirm the background seed finished on Atlas."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1539 lines — well above the 700-line guideline. Consider splitting into routers (auth, jobs, complaints, payroll, erp, admin, seed) for maintainability. Not blocking, but tech debt is accumulating.",
+    "Startup fix (asyncio.create_task with try/except wrapper) is correctly implemented at lines 1521-1531. seed() also wraps the initial count_documents in try/except (lines 1395-1399), so an Atlas outage during startup will log a warning but won't crash the app — exactly what the deployment-fix asked for.",
+    "Health endpoints (/api/health, /api/healthz, /health, /healthz) correctly do NOT touch DB — safe for K8s probes even if Mongo is briefly unreachable."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_health_and_regression.py (new file, 19 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (62/62 — 19 new + 43 existing regression)",
+    "frontend": "N/A (backend-only test as requested)"
+  },
+  "seed_data_creation": "None. Verified existing demo seed (9000000000/9000000001/9000000002/9000000003) intact and reachable after the background-task seed refactor.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Health endpoint sanity script: /app/backend/tests/test_health_and_regression.py. Public ingress only forwards /api/* to backend; root /health and /healthz must be tested against http://localhost:8001 (INTERNAL_BACKEND env var). Demo seed credentials in /app/memory/test_credentials.md. Complaints POST uses field 'description' (NOT 'message'). Payroll requires role in (contractor, client, admin).",
+  "rca_of_issue": "Original deployment failure RCA: seed() in server.py was awaited synchronously in @app.on_event('startup'). On Atlas (production Mongo), seed performs ~10+ find_one + insert_one round-trips plus bcrypt(rounds=12) hashing for 4 demo users — easily 5-15s of latency before uvicorn can accept the first request. Kubernetes readiness/liveness probes have a default failureThreshold * periodSeconds typically 3-10s — startup exceeds it -> pod marked unhealthy -> restart -> infinite loop. The applied fix (a) wraps seed in asyncio.create_task so on_event returns immediately and uvicorn starts accepting requests, (b) wraps seed in try/except so an Atlas connection failure logs but does not crash, (c) adds /api/health + /health endpoints that return {status:'ok'} without touching the DB so probes succeed even during/before seed runs. Verified all 3 mitigations work as expected in this sandbox."
+}
