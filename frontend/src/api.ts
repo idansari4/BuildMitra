@@ -97,4 +97,11 @@ export const api = {
   createOrder: (b: any) => req("POST", "/payments/create-order", b),
   verifyPayment: (b: any) => req("POST", "/payments/verify", b),
   paymentHistory: () => req("GET", "/payments/history"),
+  // Chat
+  chatSend: (to_user_id: string, text: string) => req("POST", "/chat/send", { to_user_id, text }),
+  chatThreads: () => req("GET", "/chat/threads"),
+  chatMessages: (peer_id: string) => req("GET", `/chat/messages/${peer_id}`),
+  // Payroll & AI
+  payroll: (month?: string) => req("GET", `/payroll${month ? `?month=${month}` : ""}`),
+  recommendWorkers: (jobId: string) => req("GET", `/ai/recommend-workers/${jobId}`),
 };

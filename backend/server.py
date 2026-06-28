@@ -155,9 +155,10 @@ class JobIn(BaseModel):
     start_date: Optional[str] = None
     duration_days: int = 1
     working_hours: Optional[str] = "8 hrs"
-    urgency: Optional[str] = "Normal"  # Normal | Urgent
+    urgency: Optional[str] = "Normal"
     lat: Optional[float] = None
     lng: Optional[float] = None
+    geofence_radius_m: Optional[int] = 200  # geofence radius in meters
 
 class ApplyIn(BaseModel):
     job_id: str
@@ -215,6 +216,10 @@ class BillIn(BaseModel):
     items: List[BillLine]
     tax_pct: float = 18
     notes: Optional[str] = ""
+
+class ChatSendIn(BaseModel):
+    to_user_id: str
+    text: str
 
 class RatingIn(BaseModel):
     target_user_id: str
@@ -635,23 +640,42 @@ async def job_applicants(job_id: str, user=Depends(current_user)):
     return await cursor.to_list(length=200)
 
 # --- Attendance ---
+def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    import math
+    R = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1); dl = math.radians(lng2 - lng1)
+    a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+    return 2 * R * math.asin(math.sqrt(a))
+
 @api.post("/attendance")
 async def attendance(body: AttendanceIn, user=Depends(current_user)):
+    within = True
+    distance = None
+    job = None
+    if body.job_id and body.job_id != "self":
+        job = await db.jobs.find_one({"id": body.job_id})
+        if job and job.get("lat") is not None and job.get("lng") is not None:
+            distance = _haversine_m(body.lat, body.lng, job["lat"], job["lng"])
+            radius = job.get("geofence_radius_m", 200)
+            within = distance <= radius
     rec = {
         "id": str(uuid.uuid4()),
         "worker_id": user["id"],
         "worker_name": user["name"],
         "job_id": body.job_id,
+        "job_title": job.get("title") if job else None,
         "type": body.type,
         "lat": body.lat,
         "lng": body.lng,
         "selfie": body.selfie[:200000],
-        "face_verified": True,  # mocked
+        "face_verified": True,
+        "within_geofence": within,
+        "distance_from_site_m": round(distance, 1) if distance is not None else None,
         "created_at": now_iso(),
     }
     await db.attendance.insert_one(rec)
-    rec.pop("_id", None)
-    rec.pop("selfie", None)
+    rec.pop("_id", None); rec.pop("selfie", None)
     return rec
 
 @api.get("/attendance/mine")
@@ -886,6 +910,147 @@ async def erp_dashboard(user=Depends(contractor_user)):
         "bills_total": bills_total, "bills_paid": bills_paid,
         "revenue_paid": revenue_paid, "revenue_pending": revenue_pending,
     }
+
+# --- Chat ---
+def _thread_id(a: str, b: str) -> str:
+    return "-".join(sorted([a, b]))
+
+@api.post("/chat/send")
+async def chat_send(body: ChatSendIn, user=Depends(current_user)):
+    peer = await db.users.find_one({"id": body.to_user_id}, {"_id": 0, "id": 1, "name": 1, "role": 1})
+    if not peer:
+        raise HTTPException(404, "Recipient not found")
+    msg = {
+        "id": str(uuid.uuid4()),
+        "thread_id": _thread_id(user["id"], body.to_user_id),
+        "from_id": user["id"], "from_name": user["name"],
+        "to_id": body.to_user_id, "to_name": peer["name"],
+        "text": body.text[:2000],
+        "read": False,
+        "created_at": now_iso(),
+    }
+    await db.chat_messages.insert_one(msg)
+    msg.pop("_id", None)
+    return msg
+
+@api.get("/chat/threads")
+async def chat_threads(user=Depends(current_user)):
+    pipeline = [
+        {"$match": {"$or": [{"from_id": user["id"]}, {"to_id": user["id"]}]}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id": "$thread_id",
+            "last_text": {"$first": "$text"},
+            "last_at": {"$first": "$created_at"},
+            "from_id": {"$first": "$from_id"},
+            "to_id": {"$first": "$to_id"},
+            "from_name": {"$first": "$from_name"},
+            "to_name": {"$first": "$to_name"},
+        }},
+        {"$sort": {"last_at": -1}},
+    ]
+    raw = await db.chat_messages.aggregate(pipeline).to_list(length=100)
+    out = []
+    for t in raw:
+        peer_id = t["to_id"] if t["from_id"] == user["id"] else t["from_id"]
+        peer_name = t["to_name"] if t["from_id"] == user["id"] else t["from_name"]
+        out.append({
+            "thread_id": t["_id"], "peer_id": peer_id, "peer_name": peer_name,
+            "last_text": t["last_text"], "last_at": t["last_at"],
+        })
+    return out
+
+@api.get("/chat/messages/{peer_id}")
+async def chat_messages(peer_id: str, user=Depends(current_user)):
+    tid = _thread_id(user["id"], peer_id)
+    msgs = await db.chat_messages.find({"thread_id": tid}, {"_id": 0}).sort("created_at", 1).to_list(length=500)
+    await db.chat_messages.update_many({"thread_id": tid, "to_id": user["id"], "read": False}, {"$set": {"read": True}})
+    return msgs
+
+# --- Payroll (Contractor or Client view of worker wages) ---
+@api.get("/payroll")
+async def payroll(month: Optional[str] = None, user=Depends(current_user)):
+    if user["role"] not in ("contractor", "client", "admin"):
+        raise HTTPException(403, "Only contractor/client/admin can view payroll")
+    # filter attendance by month YYYY-MM, default current month
+    if not month:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+    att = await db.attendance.find(
+        {"type": "check_in", "created_at": {"$regex": f"^{month}"}, "within_geofence": True},
+        {"_id": 0, "selfie": 0}
+    ).to_list(length=2000)
+    by_worker: dict = {}
+    for a in att:
+        wid = a["worker_id"]
+        by_worker.setdefault(wid, {"worker_id": wid, "worker_name": a["worker_name"], "days_present": 0, "jobs": set()})
+        by_worker[wid]["days_present"] += 1
+        if a.get("job_id"): by_worker[wid]["jobs"].add(a["job_id"])
+    out = []
+    for wid, row in by_worker.items():
+        worker = await db.users.find_one({"id": wid}, {"_id": 0, "daily_wage": 1, "mobile": 1})
+        wage = (worker or {}).get("daily_wage", 0)
+        out.append({
+            "worker_id": wid, "worker_name": row["worker_name"],
+            "mobile": (worker or {}).get("mobile"),
+            "days_present": row["days_present"],
+            "daily_wage": wage,
+            "total_wage": row["days_present"] * wage,
+            "jobs_count": len(row["jobs"]),
+        })
+    total = sum(r["total_wage"] for r in out)
+    return {"month": month, "rows": sorted(out, key=lambda x: -x["total_wage"]), "grand_total": total}
+
+# --- AI Worker Recommendation (for client/contractor) ---
+@api.get("/ai/recommend-workers/{job_id}")
+async def ai_recommend_workers(job_id: str, user=Depends(current_user)):
+    if user["role"] not in ("client", "contractor"):
+        raise HTTPException(403, "Clients/contractors only")
+    job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Job not found")
+    candidates = await db.users.find(
+        {"role": "worker", "skills": job["skill"], "available": True},
+        {"_id": 0, "password": 0}
+    ).limit(30).to_list(length=30)
+    if not candidates:
+        candidates = await db.users.find(
+            {"role": "worker", "available": True},
+            {"_id": 0, "password": 0}
+        ).limit(20).to_list(length=20)
+    if not candidates:
+        return {"summary": "No available workers right now.", "top_ids": [], "candidates": []}
+    brief = "\n".join([
+        f"- id={c['id']} | {c['name']} | skills={c.get('skills')} | wage=₹{c.get('daily_wage',0)} | rating={c.get('rating_avg',0)} ({c.get('rating_count',0)}) | city={c.get('city','')} | verified={c.get('aadhaar_verified', False)}"
+        for c in candidates
+    ])
+    prompt = (
+        f"Job: {job['title']} ({job['skill']}) at {job['location']}. Pays ₹{job['daily_wage']}/day, needs {job['workers_needed']} worker(s).\n"
+        f"Candidates:\n{brief}\n\nPick the TOP 3 best-fit workers and explain in 1 short sentence why. "
+        "Reply strictly as:\nIDS: id1,id2,id3\nREASON: <one line>"
+    )
+    text = "IDS: " + ",".join([c["id"] for c in candidates[:3]]) + "\nREASON: Matched by skill, wage and rating."
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"rec-{job_id}",
+            system_message="You are a hiring advisor for an Indian construction marketplace. Be concise."
+        ).with_model("anthropic", "claude-haiku-4-5-20251001")
+        resp = await chat.send_message(UserMessage(text=prompt))
+        text = str(resp)
+    except Exception as e:
+        logger.warning(f"AI recommend fallback: {e}")
+    ids: List[str] = []
+    reason = "Matched by skill and rating."
+    for line in text.splitlines():
+        line = line.strip()
+        if line.upper().startswith("IDS:"):
+            ids = [x.strip() for x in line.split(":", 1)[1].split(",") if x.strip()][:3]
+        elif line.upper().startswith("REASON:"):
+            reason = line.split(":", 1)[1].strip()
+    if not ids:
+        ids = [c["id"] for c in candidates[:3]]
+    return {"summary": reason, "top_ids": ids, "candidates": [c for c in candidates if c["id"] in ids]}
 
 # --- Bill exports (PDF + Excel) ---
 def _build_bill_pdf(bill: dict, owner_name: str) -> bytes:

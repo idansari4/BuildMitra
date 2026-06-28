@@ -49,6 +49,10 @@ export default function JobDetail() {
 
   const callPoster = () => job?.posted_by_name && Linking.openURL("tel:+919000000000").catch(() => {});
   const whatsapp = () => Linking.openURL(`https://wa.me/919000000000?text=${encodeURIComponent("Hi, regarding " + (job?.title || "your job posting"))}`).catch(() => {});
+  const openChat = () => {
+    if (!job || !user || user.id === job.posted_by) return;
+    router.push({ pathname: "/chat/[peerId]", params: { peerId: job.posted_by, peerName: job.posted_by_name } } as any);
+  };
 
   if (loading) return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface, justifyContent: "center" }}>
@@ -111,6 +115,9 @@ export default function JobDetail() {
             </View>
             <Pressable testID="call-poster" onPress={callPoster} style={styles.iconBtn}>
               <Ionicons name="call" size={20} color={colors.brand} />
+            </Pressable>
+            <Pressable testID="chat-poster" onPress={openChat} style={styles.iconBtn}>
+              <Ionicons name="chatbubble" size={20} color={colors.brand} />
             </Pressable>
             <Pressable testID="whatsapp-poster" onPress={whatsapp} style={styles.iconBtn}>
               <Ionicons name="logo-whatsapp" size={20} color={colors.success} />

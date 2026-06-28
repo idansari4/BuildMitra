@@ -110,6 +110,24 @@ export default function Profile() {
         <PrimaryButton testID="save-profile" label={tr("profile.save")} icon="checkmark-circle-outline" loading={busy} onPress={save} />
 
         <H2 style={{ marginTop: spacing.md }}>{tr("profile.settings")}</H2>
+        {(user?.role === "contractor" || user?.role === "client") && (
+          <Pressable testID="payroll-link" onPress={() => router.push("/payroll" as any)} style={styles.payrollLink}>
+            <Ionicons name="cash" size={22} color={colors.brand} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Body style={{ fontWeight: "700" }}>Payroll</Body>
+              <Muted style={{ fontSize: 11 }}>Monthly wages by attendance</Muted>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+          </Pressable>
+        )}
+        <Pressable testID="chat-link" onPress={() => router.push("/chat-list" as any)} style={styles.payrollLink}>
+          <Ionicons name="chatbubbles" size={22} color={colors.brand} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Body style={{ fontWeight: "700" }}>Messages</Body>
+            <Muted style={{ fontSize: 11 }}>In-app chat</Muted>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+        </Pressable>
         <Card>
           <View style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -210,4 +228,5 @@ const styles = StyleSheet.create({
   aadhaarHero: { alignItems: "center", padding: spacing.lg, marginBottom: spacing.lg, backgroundColor: colors.brandTertiary, borderRadius: radius.lg },
   testHint: { flexDirection: "row", alignItems: "center", marginTop: 8, padding: 10, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   modalCta: { padding: spacing.md, paddingBottom: spacing.xl, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
+  payrollLink: { flexDirection: "row", alignItems: "center", padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, marginBottom: 8 },
 });
