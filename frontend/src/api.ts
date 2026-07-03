@@ -58,6 +58,44 @@ export const api = {
   attendanceMyWorkers: (days = 30) => req("GET", `/attendance/my-workers?days=${days}`),
   walletWithdraw: (amount: number, upi_id: string) =>
     req("POST", "/wallet/withdraw", { amount, upi_id }),
+
+  // ---- Phase 2 ----
+  forgotPassword: (mobile: string) => req("POST", "/auth/forgot-password", { mobile }),
+  resetPassword: (mobile: string, otp: string, new_password: string) =>
+    req("POST", "/auth/reset-password", { mobile, otp, new_password }),
+
+  escrowDeposit: (job_id: string, amount: number) => req("POST", "/escrow/deposit", { job_id, amount }),
+  escrowMine: () => req("GET", "/escrow/mine"),
+  escrowRelease: (escrow_id: string, worker_id: string, amount: number) =>
+    req("POST", "/escrow/release", { escrow_id, worker_id, amount }),
+  escrowRefund: (escrow_id: string) => req("POST", "/escrow/refund", { escrow_id }),
+
+  ratingsForUser: (uid: string) => req("GET", `/ratings/user/${uid}`),
+  ratingsMine: () => req("GET", "/ratings/mine"),
+  submitRating: (target_user_id: string, stars: number, comment?: string, job_id?: string) =>
+    req("POST", "/ratings", { target_user_id, stars, comment: comment || "", job_id: job_id || null }),
+
+  leaveRequest: (body: any) => req("POST", "/leave/request", body),
+  leaveMine: () => req("GET", "/leave/mine"),
+  leaveInbox: () => req("GET", "/leave/inbox"),
+  leaveDecision: (id: string, decision: "approved" | "rejected", note?: string) =>
+    req("POST", `/leave/${id}/decision`, { decision, note: note || "" }),
+
+  addProgressPhoto: (body: any) => req("POST", "/progress-photos", body),
+  listProgressPhotos: (job_id: string) => req("GET", `/progress-photos/${job_id}`),
+  deleteProgressPhoto: (id: string) => req("DELETE", `/progress-photos/${id}`),
+
+  projectProgress: () => req("GET", "/projects/progress"),
+  salarySummary: (months = 6) => req("GET", `/salary/summary?months=${months}`),
+
+  adminActivity: (limit = 100) => req("GET", `/admin/activity?limit=${limit}`),
+  adminMonitor: () => req("GET", "/admin/monitor"),
+
+  jobsSearch: (params: { min_wage?: number; max_wage?: number; skill?: string; city?: string; status?: string }) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== "") qs.append(k, String(v)); });
+    return req("GET", `/jobs/search?${qs.toString()}`);
+  },
   attendance: (b: any) => req("POST", "/attendance", b),
   myAttendance: () => req("GET", "/attendance/mine"),
   workers: (skill?: string) => req("GET", `/workers${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`),

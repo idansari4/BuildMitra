@@ -29,6 +29,7 @@ export default function AdminLayout() {
       }}
     >
       <Tabs.Screen name="dashboard" options={{ title: t("tab.dashboard"), tabBarIcon: ({ color, size }) => <Ionicons name="speedometer" size={size} color={color} /> }} />
+      <Tabs.Screen name="monitor" options={{ title: "Monitor", tabBarIcon: ({ color, size }) => <Ionicons name="pulse" size={size} color={color} /> }} />
       <Tabs.Screen name="users" options={{ title: t("tab.users"), tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} /> }} />
       <Tabs.Screen name="jobs" options={{ title: t("tab.jobs"), tabBarIcon: ({ color, size }) => <Ionicons name="briefcase" size={size} color={color} /> }} />
       <Tabs.Screen name="complaints" options={{ title: t("tab.complaints"), tabBarIcon: ({ color, size }) => <Ionicons name="alert-circle" size={size} color={color} /> }} />

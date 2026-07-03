@@ -12,6 +12,8 @@ from datetime import datetime, timezone, timedelta
 import uuid
 import bcrypt
 import jwt as pyjwt
+import secrets
+import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -236,6 +238,40 @@ class ApplicationStatusIn(BaseModel):
 
 class JobStatusIn(BaseModel):
     status: str  # "open" | "in_progress" | "completed" | "cancelled"
+
+class ForgotPasswordIn(BaseModel):
+    mobile: str
+
+class ResetPasswordIn(BaseModel):
+    mobile: str
+    otp: str
+    new_password: str
+
+class EscrowDepositIn(BaseModel):
+    job_id: str
+    amount: float
+
+class EscrowActionIn(BaseModel):
+    escrow_id: str
+    worker_id: Optional[str] = None
+    amount: Optional[float] = None
+
+class LeaveRequestIn(BaseModel):
+    from_date: str  # YYYY-MM-DD
+    to_date: str
+    reason: str
+    job_id: Optional[str] = None
+
+class LeaveDecisionIn(BaseModel):
+    decision: str  # "approved" | "rejected"
+    note: Optional[str] = ""
+
+class ProgressPhotoIn(BaseModel):
+    job_id: str
+    photo: str  # base64 data URL
+    caption: Optional[str] = ""
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 # ---------- routes ----------
 @api.get("/")
@@ -1535,6 +1571,448 @@ async def admin_reject_complaint(cid: str, note: Optional[str] = "", _=Depends(a
     if res.matched_count == 0:
         raise HTTPException(404, "Complaint not found")
     return {"ok": True}
+
+    res = await db.complaints.update_one({"id": cid}, {"$set": {"status": "rejected", "admin_note": note or ""}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Complaint not found")
+    return {"ok": True}
+
+# =====================================================================
+# PHASE 2 — Production Features
+# Forgot Password, Escrow, Ratings enhancement, Leave, Progress Photos,
+# Activity Log, Enhanced Filters, Salary Summary, Project Progress,
+# Admin Monitoring.
+# =====================================================================
+
+# ---------- Activity Log helper ----------
+async def log_activity(actor_id: str, actor_role: str, action: str, target_type: str = "", target_id: str = "", meta: Optional[dict] = None):
+    """Append an entry to activity_log collection. Non-blocking on failure."""
+    try:
+        await db.activity_log.insert_one({
+            "id": str(uuid.uuid4()),
+            "actor_id": actor_id,
+            "actor_role": actor_role,
+            "action": action,
+            "target_type": target_type,
+            "target_id": target_id,
+            "meta": meta or {},
+            "created_at": now_iso(),
+        })
+    except Exception as e:
+        logger.debug("Activity log failed: %s", e)
+
+# ---------- Forgot Password ----------
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordIn):
+    """Sends an OTP to the mobile for password reset. In dev mode, returns dev_code."""
+    if not re.fullmatch(r"\d{10}", body.mobile or ""):
+        raise HTTPException(400, "Invalid mobile")
+    user = await db.users.find_one({"mobile": body.mobile})
+    if not user:
+        # Do NOT reveal user existence; but return success shape
+        return {"ok": True, "dev_code": None}
+    code = f"{secrets.randbelow(1_000_000):06d}" if os.getenv("PROD_OTP") == "1" else DEV_OTP_CODE
+    await db.password_resets.update_one(
+        {"mobile": body.mobile},
+        {"$set": {"code": code, "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()}},
+        upsert=True,
+    )
+    # In prod, send via Twilio; in dev, just return the code
+    if _twilio_client and TWILIO_FROM:
+        try:
+            _twilio_client.messages.create(body=f"BuildMitra password reset OTP: {code}", from_=TWILIO_FROM, to=f"+91{body.mobile}")
+        except Exception as e:
+            logger.warning("Twilio password OTP failed: %s", e)
+    return {"ok": True, "dev_code": code if os.getenv("PROD_OTP") != "1" else None}
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordIn):
+    if len(body.new_password) < 4:
+        raise HTTPException(400, "Password must be at least 4 characters")
+    rec = await db.password_resets.find_one({"mobile": body.mobile})
+    if not rec or rec.get("code") != body.otp:
+        raise HTTPException(401, "Invalid OTP")
+    exp = rec.get("expires_at")
+    if exp and datetime.fromisoformat(exp) < datetime.now(timezone.utc):
+        raise HTTPException(401, "OTP expired")
+    user = await db.users.find_one({"mobile": body.mobile})
+    if not user:
+        raise HTTPException(404, "User not found")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password": hash_pw(body.new_password), "password_updated_at": now_iso()}}
+    )
+    await db.password_resets.delete_one({"mobile": body.mobile})
+    await log_activity(user["id"], user["role"], "password_reset")
+    return {"ok": True, "message": "Password reset successful"}
+
+# ---------- Escrow Wallet ----------
+@api.post("/escrow/deposit")
+async def escrow_deposit(body: EscrowDepositIn, user=Depends(current_user)):
+    """Client/contractor deposits money into escrow for a job.
+    Amount is added to escrow (not yet paid to worker)."""
+    if user["role"] not in ("client", "contractor"):
+        raise HTTPException(403, "Only clients/contractors can escrow")
+    if body.amount <= 0:
+        raise HTTPException(400, "Invalid amount")
+    job = await db.jobs.find_one({"id": body.job_id})
+    if not job or job["posted_by"] != user["id"]:
+        raise HTTPException(403, "Not your job")
+    esc = {
+        "id": str(uuid.uuid4()),
+        "job_id": body.job_id,
+        "job_title": job.get("title"),
+        "payer_id": user["id"],
+        "amount": body.amount,
+        "amount_released": 0.0,
+        "status": "held",  # held | released | refunded
+        "created_at": now_iso(),
+    }
+    await db.escrow.insert_one(esc)
+    await log_activity(user["id"], user["role"], "escrow_deposit", "escrow", esc["id"], {"job_id": body.job_id, "amount": body.amount})
+    esc.pop("_id", None)
+    return {"ok": True, "escrow": esc}
+
+@api.get("/escrow/mine")
+async def escrow_mine(user=Depends(current_user)):
+    """Returns escrow records owned by user (as payer or beneficiary)."""
+    q: dict = {"payer_id": user["id"]}
+    cur = db.escrow.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
+    return await cur.to_list(length=200)
+
+@api.post("/escrow/release")
+async def escrow_release(body: EscrowActionIn, user=Depends(current_user)):
+    """Client releases (part of) escrow to a worker. Adds to worker wallet."""
+    if not body.worker_id or not body.amount or body.amount <= 0:
+        raise HTTPException(400, "worker_id and positive amount required")
+    esc = await db.escrow.find_one({"id": body.escrow_id})
+    if not esc:
+        raise HTTPException(404, "Escrow not found")
+    if esc["payer_id"] != user["id"]:
+        raise HTTPException(403, "Not your escrow")
+    remaining = float(esc["amount"]) - float(esc.get("amount_released", 0))
+    if body.amount > remaining:
+        raise HTTPException(400, f"Amount exceeds remaining escrow (₹{remaining:.2f})")
+    worker = await db.users.find_one({"id": body.worker_id})
+    if not worker:
+        raise HTTPException(404, "Worker not found")
+    new_released = float(esc.get("amount_released", 0)) + float(body.amount)
+    new_status = "released" if new_released >= float(esc["amount"]) - 0.01 else "held"
+    await db.escrow.update_one(
+        {"id": esc["id"]},
+        {"$set": {"amount_released": new_released, "status": new_status, "last_release_at": now_iso()}}
+    )
+    await db.users.update_one({"id": body.worker_id}, {"$inc": {"wallet_balance": float(body.amount)}})
+    txn = {
+        "id": str(uuid.uuid4()),
+        "user_id": body.worker_id,
+        "type": "escrow_release",
+        "amount": float(body.amount),
+        "status": "success",
+        "note": f"Escrow released for job: {esc.get('job_title', '')}",
+        "job_id": esc.get("job_id"),
+        "escrow_id": esc["id"],
+        "created_at": now_iso(),
+    }
+    await db.wallet_txns.insert_one(txn)
+    await log_activity(user["id"], user["role"], "escrow_release", "escrow", esc["id"], {"worker_id": body.worker_id, "amount": body.amount})
+    return {"ok": True, "released": new_released, "status": new_status}
+
+@api.post("/escrow/refund")
+async def escrow_refund(body: EscrowActionIn, user=Depends(current_user)):
+    """Refund remaining escrow amount back to payer (job cancelled)."""
+    esc = await db.escrow.find_one({"id": body.escrow_id})
+    if not esc:
+        raise HTTPException(404, "Escrow not found")
+    if esc["payer_id"] != user["id"]:
+        raise HTTPException(403, "Not your escrow")
+    if esc["status"] != "held":
+        raise HTTPException(400, "Escrow already settled")
+    await db.escrow.update_one(
+        {"id": esc["id"]},
+        {"$set": {"status": "refunded", "refunded_at": now_iso()}}
+    )
+    await log_activity(user["id"], user["role"], "escrow_refund", "escrow", esc["id"])
+    return {"ok": True, "status": "refunded"}
+
+# ---------- Ratings (list for target) ----------
+@api.get("/ratings/user/{user_id}")
+async def ratings_for_user(user_id: str, _user=Depends(current_user)):
+    cur = db.ratings.find({"target_user_id": user_id}, {"_id": 0}).sort("created_at", -1).limit(100)
+    return await cur.to_list(length=100)
+
+@api.get("/ratings/mine")
+async def my_ratings(user=Depends(current_user)):
+    """Ratings this user has given."""
+    cur = db.ratings.find({"rater_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100)
+    return await cur.to_list(length=100)
+
+# ---------- Leave Management ----------
+@api.post("/leave/request")
+async def leave_request(body: LeaveRequestIn, user=Depends(current_user)):
+    if user["role"] != "worker":
+        raise HTTPException(403, "Only workers can request leave")
+    if not body.from_date or not body.to_date or not body.reason.strip():
+        raise HTTPException(400, "All fields required")
+    approver_id = ""
+    approver_name = ""
+    if body.job_id:
+        job = await db.jobs.find_one({"id": body.job_id})
+        if job:
+            approver_id = job["posted_by"]
+            approver_name = job.get("posted_by_name", "")
+    rec = {
+        "id": str(uuid.uuid4()),
+        "worker_id": user["id"],
+        "worker_name": user["name"],
+        "job_id": body.job_id or "",
+        "approver_id": approver_id,
+        "approver_name": approver_name,
+        "from_date": body.from_date,
+        "to_date": body.to_date,
+        "reason": body.reason.strip(),
+        "status": "pending",
+        "note": "",
+        "created_at": now_iso(),
+    }
+    await db.leaves.insert_one(rec)
+    await log_activity(user["id"], user["role"], "leave_request", "leave", rec["id"])
+    rec.pop("_id", None)
+    return rec
+
+@api.get("/leave/mine")
+async def leave_mine(user=Depends(current_user)):
+    cur = db.leaves.find({"worker_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100)
+    return await cur.to_list(length=100)
+
+@api.get("/leave/inbox")
+async def leave_inbox(user=Depends(current_user)):
+    """For contractor/client: pending/decided leave requests for their jobs."""
+    if user["role"] not in ("client", "contractor", "admin"):
+        raise HTTPException(403, "Not allowed")
+    q = {"approver_id": user["id"]} if user["role"] != "admin" else {}
+    cur = db.leaves.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
+    return await cur.to_list(length=200)
+
+@api.post("/leave/{leave_id}/decision")
+async def leave_decision(leave_id: str, body: LeaveDecisionIn, user=Depends(current_user)):
+    if body.decision not in ("approved", "rejected"):
+        raise HTTPException(400, "Invalid decision")
+    rec = await db.leaves.find_one({"id": leave_id})
+    if not rec:
+        raise HTTPException(404, "Leave request not found")
+    if user["role"] != "admin" and rec.get("approver_id") != user["id"]:
+        raise HTTPException(403, "Not your inbox")
+    await db.leaves.update_one(
+        {"id": leave_id},
+        {"$set": {"status": body.decision, "note": body.note or "", "decided_at": now_iso()}}
+    )
+    await log_activity(user["id"], user["role"], f"leave_{body.decision}", "leave", leave_id)
+    return {"ok": True, "status": body.decision}
+
+# ---------- Site Progress Photos ----------
+@api.post("/progress-photos")
+async def add_progress_photo(body: ProgressPhotoIn, user=Depends(current_user)):
+    if user["role"] not in ("contractor", "worker", "client"):
+        raise HTTPException(403, "Not allowed")
+    job = await db.jobs.find_one({"id": body.job_id})
+    if not job:
+        raise HTTPException(404, "Job not found")
+    rec = {
+        "id": str(uuid.uuid4()),
+        "job_id": body.job_id,
+        "job_title": job.get("title"),
+        "uploader_id": user["id"],
+        "uploader_name": user["name"],
+        "uploader_role": user["role"],
+        "photo": body.photo,
+        "caption": (body.caption or "").strip(),
+        "lat": body.lat,
+        "lng": body.lng,
+        "created_at": now_iso(),
+    }
+    await db.progress_photos.insert_one(rec)
+    await log_activity(user["id"], user["role"], "progress_photo_add", "job", body.job_id)
+    rec.pop("_id", None)
+    return rec
+
+@api.get("/progress-photos/{job_id}")
+async def list_progress_photos(job_id: str, _user=Depends(current_user)):
+    cur = db.progress_photos.find({"job_id": job_id}, {"_id": 0}).sort("created_at", -1).limit(200)
+    return await cur.to_list(length=200)
+
+@api.delete("/progress-photos/{photo_id}")
+async def delete_progress_photo(photo_id: str, user=Depends(current_user)):
+    rec = await db.progress_photos.find_one({"id": photo_id})
+    if not rec:
+        raise HTTPException(404, "Not found")
+    if rec["uploader_id"] != user["id"] and user["role"] != "admin":
+        raise HTTPException(403, "Not your photo")
+    await db.progress_photos.delete_one({"id": photo_id})
+    return {"ok": True}
+
+# ---------- Client Project Progress ----------
+@api.get("/projects/progress")
+async def project_progress(user=Depends(current_user)):
+    """Progress summary for each job posted by the user.
+    Returns: [{job_id, title, status, workers_hired, days_worked, photos_count,
+               escrow_amount, escrow_released, complaints_count}]
+    """
+    if user["role"] not in ("client", "contractor", "admin"):
+        raise HTTPException(403, "Not allowed")
+    q = {} if user["role"] == "admin" else {"posted_by": user["id"]}
+    jobs = await db.jobs.find(q, {"_id": 0}).sort("created_at", -1).limit(100).to_list(length=100)
+    if not jobs:
+        return []
+    job_ids = [j["id"] for j in jobs]
+    apps = await db.applications.find(
+        {"job_id": {"$in": job_ids}, "status": "accepted"},
+        {"_id": 0, "job_id": 1, "worker_id": 1}
+    ).to_list(length=None)
+    att = await db.attendance.find(
+        {"job_id": {"$in": job_ids}, "type": "check_in", "within_geofence": True},
+        {"_id": 0, "job_id": 1, "worker_id": 1}
+    ).to_list(length=None)
+    photos = await db.progress_photos.find(
+        {"job_id": {"$in": job_ids}},
+        {"_id": 0, "job_id": 1}
+    ).to_list(length=None)
+    esc = await db.escrow.find(
+        {"job_id": {"$in": job_ids}},
+        {"_id": 0}
+    ).to_list(length=None)
+
+    def agg(job_id: str):
+        hired = {a["worker_id"] for a in apps if a["job_id"] == job_id}
+        days = sum(1 for a in att if a["job_id"] == job_id)
+        photos_count = sum(1 for p in photos if p["job_id"] == job_id)
+        esc_amt = sum(float(e["amount"]) for e in esc if e["job_id"] == job_id)
+        esc_rel = sum(float(e.get("amount_released", 0)) for e in esc if e["job_id"] == job_id)
+        return len(hired), days, photos_count, esc_amt, esc_rel
+
+    out = []
+    for j in jobs:
+        h, d, p, ea, er = agg(j["id"])
+        out.append({
+            "job_id": j["id"], "title": j.get("title"),
+            "status": j.get("status", "open"),
+            "workers_hired": h,
+            "workers_needed": j.get("workers_needed", 1),
+            "days_worked": d,
+            "duration_days": j.get("duration_days", 0),
+            "photos_count": p,
+            "escrow_amount": ea, "escrow_released": er,
+            "daily_wage": j.get("daily_wage", 0),
+            "created_at": j.get("created_at"),
+        })
+    return out
+
+# ---------- Worker Salary Summary ----------
+@api.get("/salary/summary")
+async def salary_summary(months: int = 6, user=Depends(current_user)):
+    """For workers: monthly attendance & earnings summary for last N months."""
+    if user["role"] != "worker":
+        raise HTTPException(403, "Workers only")
+    wage = float(user.get("daily_wage", 0) or 0)
+    # Fetch all check-ins within geofence for user in last N months
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=months * 31)).isoformat()
+    att = await db.attendance.find(
+        {"worker_id": user["id"], "type": "check_in", "within_geofence": True,
+         "created_at": {"$gte": cutoff}},
+        {"_id": 0, "selfie": 0}
+    ).limit(2000).to_list(length=2000)
+    # Group by month
+    by_month: dict = {}
+    for a in att:
+        m = str(a["created_at"])[:7]  # YYYY-MM
+        by_month.setdefault(m, {"month": m, "days_present": 0, "jobs": set()})
+        by_month[m]["days_present"] += 1
+        if a.get("job_id") and a["job_id"] != "self":
+            by_month[m]["jobs"].add(a["job_id"])
+    rows = []
+    for m in sorted(by_month.keys(), reverse=True):
+        r = by_month[m]
+        rows.append({
+            "month": m,
+            "days_present": r["days_present"],
+            "jobs_count": len(r["jobs"]),
+            "daily_wage": wage,
+            "earned": r["days_present"] * wage,
+        })
+    total_earned = sum(r["earned"] for r in rows)
+    wallet_bal = float(user.get("wallet_balance", 0) or 0)
+    return {
+        "rows": rows,
+        "total_earned": total_earned,
+        "wallet_balance": wallet_bal,
+        "current_wage": wage,
+    }
+
+# ---------- Admin Monitoring ----------
+@api.get("/admin/activity")
+async def admin_activity(limit: int = 100, user=Depends(current_user)):
+    if user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    cur = db.activity_log.find({}, {"_id": 0}).sort("created_at", -1).limit(min(limit, 500))
+    return await cur.to_list(length=min(limit, 500))
+
+@api.get("/admin/monitor")
+async def admin_monitor(user=Depends(current_user)):
+    if user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    users_total = await db.users.count_documents({})
+    workers = await db.users.count_documents({"role": "worker"})
+    contractors = await db.users.count_documents({"role": "contractor"})
+    clients = await db.users.count_documents({"role": "client"})
+    aadhaar_verified = await db.users.count_documents({"aadhaar_verified": True})
+    jobs_total = await db.jobs.count_documents({})
+    jobs_open = await db.jobs.count_documents({"status": "open"})
+    jobs_progress = await db.jobs.count_documents({"status": "in_progress"})
+    jobs_completed = await db.jobs.count_documents({"status": "completed"})
+    complaints_open = await db.complaints.count_documents({"status": "open"})
+    escrow_held = await db.escrow.count_documents({"status": "held"})
+    photos = await db.progress_photos.count_documents({})
+    leaves_pending = await db.leaves.count_documents({"status": "pending"})
+    # Wallet: total held in system
+    wallet_pipeline = [{"$group": {"_id": None, "total": {"$sum": "$wallet_balance"}}}]
+    tot_wallet = 0.0
+    async for row in db.users.aggregate(wallet_pipeline):
+        tot_wallet = float(row.get("total", 0) or 0)
+    return {
+        "users": {"total": users_total, "workers": workers, "contractors": contractors,
+                  "clients": clients, "aadhaar_verified": aadhaar_verified},
+        "jobs": {"total": jobs_total, "open": jobs_open, "in_progress": jobs_progress,
+                 "completed": jobs_completed},
+        "complaints_open": complaints_open,
+        "escrow_held": escrow_held,
+        "progress_photos": photos,
+        "leaves_pending": leaves_pending,
+        "total_wallet_balance": tot_wallet,
+    }
+
+# ---------- Enhanced Jobs Search ----------
+# Note: The existing GET /jobs already supports role-based filtering.
+# We now also accept optional query params for min_wage/max_wage/city/skill.
+@api.get("/jobs/search")
+async def jobs_search(
+    min_wage: Optional[float] = None,
+    max_wage: Optional[float] = None,
+    skill: Optional[str] = None,
+    city: Optional[str] = None,
+    status: Optional[str] = "open",
+    _user=Depends(current_user),
+):
+    q: dict = {"status": status or "open"}
+    if min_wage is not None:
+        q["daily_wage"] = q.get("daily_wage", {}) | {"$gte": float(min_wage)}
+    if max_wage is not None:
+        q["daily_wage"] = q.get("daily_wage", {}) | {"$lte": float(max_wage)}
+    if skill:
+        q["skill"] = skill
+    if city:
+        q["location"] = {"$regex": city, "$options": "i"}
+    cur = db.jobs.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
+    return await cur.to_list(length=200)
 
 # --- Seed ---
 async def seed():

@@ -1,0 +1,55 @@
+{
+  "summary": "Phase 2 backend testing for BuildMitra. 49/52 tests passed (94%). All new endpoints work: forgot-password/reset (6/6), escrow deposit/release/refund/mine (9/9), full E2E flow (client posts job → deposits ₹5000 escrow → worker applies → accepted → check-in within geofence → ₹1000 released → worker wallet credited → escrow shows ₹4000 remaining held → leave request → approved → progress photo uploaded → project-progress aggregates correct data), ratings list/mine, leave management, progress photos, projects/progress, salary/summary, admin/monitor, admin/activity, and smoke regression on health/login/me/jobs/complaints/bills/attendance/payroll. Only 3 failures — all caused by ONE critical bug: GET /api/jobs/search returns 404 because it's declared AFTER /api/jobs/{job_id} in server.py, so 'search' is treated as a job_id.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/jobs/search",
+        "issue": "Route is UNREACHABLE — declared at line 1996 in server.py, but /api/jobs/{job_id} declared earlier at line 687. FastAPI matches routes in order, so /jobs/search is caught by /jobs/{job_id} → returns 404 {\"detail\":\"Job not found\"}. FIX: Move the @api.get('/jobs/search') definition ABOVE @api.get('/jobs/{job_id}') (similar to how /jobs/hired and /jobs/mine are ordered).",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/ratings/mine",
+        "issue": "Filters by `rater_id` field (server.py:1747) but POST /api/ratings creates records with field `by` (server.py:857). Result: /ratings/mine will always return [] — the field mismatch means users can never see their own submitted ratings. Fix: change filter to {'by': user['id']} OR write `rater_id` on insert."
+      },
+      {
+        "endpoint": "GET /api/escrow/mine",
+        "issue": "Docstring says 'as payer or beneficiary' but query only checks payer_id (server.py:1679). Workers who receive escrow releases cannot list them via this endpoint. Consider adding $or with worker_id (though workers see credits via /api/wallet, so lower priority)."
+      },
+      {
+        "endpoint": "POST /api/auth/forgot-password",
+        "issue": "References undefined variable TWILIO_FROM (server.py:1621, 1623). Would raise NameError if _twilio_client were configured. In current dev mode _twilio_client is None so short-circuit prevents crash, but this is a latent production bug — define TWILIO_FROM env var or remove the reference."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase2_features.py",
+    "/app/test_reports/pytest/iter11_phase2.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix route ordering in /app/backend/server.py — move `@api.get('/jobs/search')` (currently line 1996) to appear BEFORE `@api.get('/jobs/{job_id}')` (line 687). Same pattern already used for /jobs/mine and /jobs/hired.",
+    "Fix /api/ratings/mine field mismatch — either write `rater_id: user['id']` on POST /ratings insert OR change GET /ratings/mine filter to {'by': user['id']}.",
+    "Define TWILIO_FROM env var (or remove the TWILIO_FROM reference in forgot_password) to avoid latent NameError in production."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 2226 lines — should be split into modular files (auth.py, escrow.py, leave.py, admin.py, erp.py) for maintainability.",
+    "Route ordering bug for /jobs/search shows lack of test coverage on new endpoints — the search endpoint was likely never smoke-tested after being added.",
+    "Consider adding a Pydantic validator or explicit check for 4-digit-min on ForgotPasswordIn.mobile (currently regex only in handler)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase2_features.py (new — 52 tests covering all Phase 2 endpoints + E2E flow + smoke regression)"
+  ],
+  "success_rate": {"backend": "94.2% (49/52)", "frontend": "N/A (backend only requested)"},
+  "seed_data_creation": "Test-scoped: created 1 TEST_ job (Mumbai Mason ₹900/day), 2 escrow deposits (₹5000 partially released, ₹500 refunded), 1 application accepted, 1 attendance check-in, 1 rating, 1 leave request approved, 2 progress photos (1 deleted). All prefixed TEST_ where possible. Worker wallet_balance increased by ₹1000. Password reset flow used demo1234 (unchanged).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Phase 2 endpoints all functional except /api/jobs/search (route ordering bug — trivial one-line move fix). Test file at /app/backend/tests/test_phase2_features.py has 52 tests and takes ~9s to run. Includes a session-scoped `e2e_context` fixture that provisions a fresh job + escrow. Re-run after main agent fixes to confirm 52/52. Also verify /ratings/mine returns rated records after field-name fix.",
+  "rca_of_issue": "PRIMARY BUG (route ordering) — /jobs/search 404s because FastAPI evaluates path routes in registration order. The path `/jobs/search` matches the earlier-registered `/jobs/{job_id}` pattern (with job_id='search'), which looks up a nonexistent job and returns 404. Verified via `curl https://buildmitra.preview.emergentagent.com/api/jobs/search` → 404 {\"detail\":\"Job not found\"}. Mitigation: In server.py, cut the `@api.get('/jobs/search')` block from lines ~1996-2015 and paste it immediately BEFORE line 687 (`@api.get('/jobs/{job_id}')`). Confirmed working precedent: /jobs/mine (line 662) and /jobs/hired (line 667) are declared before /jobs/{job_id} in the same file."
+}

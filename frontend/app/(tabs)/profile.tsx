@@ -244,6 +244,39 @@ export default function Profile() {
           <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
         </Pressable>
 
+        {user?.role === "worker" && (
+          <Pressable testID="salary-summary-link" onPress={() => router.push("/salary-summary" as any)} style={styles.payrollLink}>
+            <Ionicons name="cash" size={22} color={colors.brand} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Body style={{ fontWeight: "700" }}>Salary Summary</Body>
+              <Muted style={{ fontSize: 11 }}>Monthly earnings & attendance</Muted>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+          </Pressable>
+        )}
+
+        {(user?.role === "worker" || user?.role === "contractor" || user?.role === "client" || user?.role === "admin") && (
+          <Pressable testID="leave-link" onPress={() => router.push("/leave" as any)} style={styles.payrollLink}>
+            <Ionicons name="calendar" size={22} color={colors.brand} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Body style={{ fontWeight: "700" }}>Leave Management</Body>
+              <Muted style={{ fontSize: 11 }}>{user?.role === "worker" ? "Request leave" : "Approve worker leave"}</Muted>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+          </Pressable>
+        )}
+
+        {(user?.role === "contractor" || user?.role === "client") && (
+          <Pressable testID="project-progress-link" onPress={() => router.push("/project-progress" as any)} style={styles.payrollLink}>
+            <Ionicons name="bar-chart" size={22} color={colors.brand} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Body style={{ fontWeight: "700" }}>Project Progress</Body>
+              <Muted style={{ fontSize: 11 }}>Track hiring, days, escrow across jobs</Muted>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+          </Pressable>
+        )}
+
         {(user?.role === "contractor" || user?.role === "client") && (
           <Pressable testID="payroll-link" onPress={() => router.push("/payroll" as any)} style={styles.payrollLink}>
             <Ionicons name="cash" size={22} color={colors.brand} />

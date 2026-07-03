@@ -10,6 +10,8 @@ import { useAuth } from "@/src/auth";
 import { colors, radius, spacing, SKILL_IMAGES, type as t } from "@/src/theme";
 import { H1, Body, Muted, PrimaryButton, Card, SecondaryButton } from "@/src/ui";
 
+import { RatingSheet } from "@/src/rating-sheet";
+
 const STATUS_META: Record<string, { bg: string; color: string; label: string }> = {
   open:         { bg: "#DCFCE7", color: "#16A34A", label: "OPEN" },
   in_progress:  { bg: "#FEF3C7", color: "#D97706", label: "IN PROGRESS" },
@@ -34,6 +36,7 @@ export default function JobDetail() {
   const [applied, setApplied] = useState(false);
   const [busyAppId, setBusyAppId] = useState<string | null>(null);
   const [busyStatus, setBusyStatus] = useState(false);
+  const [rateFor, setRateFor] = useState<{ id: string; name: string } | null>(null);
 
   const loadAll = async () => {
     try {
@@ -219,10 +222,41 @@ export default function JobDetail() {
                       </Pressable>
                     </View>
                   )}
+                  {a.status === "accepted" && (status === "completed" || status === "in_progress") && (
+                    <Pressable
+                      testID={`rate-${a.id}`}
+                      onPress={() => setRateFor({ id: a.worker_id, name: a.worker_name })}
+                      style={[styles.hireBtn, { backgroundColor: colors.warning, marginTop: 8 }]}
+                    >
+                      <Ionicons name="star" size={16} color="#FFF" />
+                      <Body style={{ color: "#FFF", fontWeight: "800", marginLeft: 4 }}>Rate {a.worker_name}</Body>
+                    </Pressable>
+                  )}
                 </Card>
               );
             })}
           </View>
+        )}
+
+        {isOwner && (
+          <Pressable testID="site-photos-link" onPress={() => router.push({ pathname: "/site-photos" as any, params: { jobId: id } })} style={styles.payrollLink}>
+            <Ionicons name="camera" size={22} color={colors.brand} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Body style={{ fontWeight: "700" }}>Site Progress Photos</Body>
+              <Muted style={{ fontSize: 11 }}>Upload daily photos of this site</Muted>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+          </Pressable>
+        )}
+        {isWorker && applied && (
+          <Pressable testID="site-photos-link-w" onPress={() => router.push({ pathname: "/site-photos" as any, params: { jobId: id } })} style={styles.payrollLink}>
+            <Ionicons name="camera" size={22} color={colors.brand} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Body style={{ fontWeight: "700" }}>Site Photos</Body>
+              <Muted style={{ fontSize: 11 }}>View or upload progress</Muted>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+          </Pressable>
         )}
 
         {isOwner && (
@@ -277,6 +311,15 @@ export default function JobDetail() {
           />
         </View>
       )}
+
+      <RatingSheet
+        visible={!!rateFor}
+        target_user_id={rateFor?.id || ""}
+        target_name={rateFor?.name}
+        job_id={id}
+        onClose={() => setRateFor(null)}
+        onSubmit={() => setMsg("Rating saved ✓")}
+      />
     </View>
   );
 }
@@ -328,5 +371,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopWidth: 1, borderTopColor: colors.border,
   },
+  payrollLink: { flexDirection: "row", alignItems: "center", padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, marginBottom: 8 },
 });
 

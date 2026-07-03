@@ -89,6 +89,12 @@ export default function Login() {
             </Body>
           </Pressable>
 
+          <Pressable testID="goto-forgot" onPress={() => router.push("/(auth)/forgot" as any)}>
+            <Body style={{ marginTop: spacing.sm, textAlign: "center", color: colors.brand, fontWeight: "700" }}>
+              Forgot password?
+            </Body>
+          </Pressable>
+
           <Pressable testID="goto-register" onPress={() => router.push({ pathname: "/(auth)/register", params: { role: role || "worker" } } as any)}>
             <Body style={{ marginTop: spacing.lg, textAlign: "center", color: colors.onSurfaceSecondary }}>
               {t("auth.newHere")} <Body style={{ color: colors.brand, fontWeight: "700" }}>{t("auth.createAccount")}</Body>
