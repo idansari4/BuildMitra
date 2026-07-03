@@ -57,9 +57,22 @@ export default function Activity() {
               <Body style={{ fontWeight: "700", fontSize: t.lg }}>{isWorker ? item.job_title : item.title}</Body>
               <View style={{ flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                 {isWorker ? (
-                  <View style={styles.statusTag}>
-                    <Body style={{ fontSize: t.sm, fontWeight: "700", color: colors.onBrandSecondary }}>
-                      {String(item.status).toUpperCase()}
+                  <View style={[
+                    styles.statusTag,
+                    item.status === "accepted" && { backgroundColor: "#DCFCE7" },
+                    item.status === "rejected" && { backgroundColor: "#FEE2E2" },
+                    item.status === "pending" && { backgroundColor: "#FEF3C7" },
+                  ]}>
+                    <Body style={{
+                      fontSize: t.sm, fontWeight: "700",
+                      color: item.status === "accepted" ? "#16A34A"
+                           : item.status === "rejected" ? "#DC2626"
+                           : item.status === "pending" ? "#D97706"
+                           : colors.onBrandSecondary,
+                    }}>
+                      {item.status === "accepted" ? "HIRED ✓" :
+                       item.status === "rejected" ? "REJECTED" :
+                       String(item.status).toUpperCase()}
                     </Body>
                   </View>
                 ) : (
@@ -67,6 +80,11 @@ export default function Activity() {
                     <View style={styles.tagInfo}><Body style={{ fontSize: t.sm }}>{item.skill}</Body></View>
                     <View style={styles.tagInfo}><Body style={{ fontSize: t.sm }}>{item.applicants_count} applied</Body></View>
                     <View style={styles.tagInfo}><Body style={{ fontSize: t.sm, fontWeight: "700" }}>₹{item.daily_wage}/day</Body></View>
+                    <View style={[styles.tagInfo, item.status === "in_progress" && { backgroundColor: "#FEF3C7" }, item.status === "completed" && { backgroundColor: "#DBEAFE" }]}>
+                      <Body style={{ fontSize: t.sm, fontWeight: "700", color: item.status === "in_progress" ? "#D97706" : item.status === "completed" ? "#2563EB" : colors.onBrand }}>
+                        {String(item.status || "open").replace("_", " ").toUpperCase()}
+                      </Body>
+                    </View>
                   </>
                 )}
               </View>

@@ -231,6 +231,12 @@ class PasswordChangeIn(BaseModel):
     old_password: str
     new_password: str
 
+class ApplicationStatusIn(BaseModel):
+    status: str  # "accepted" or "rejected"
+
+class JobStatusIn(BaseModel):
+    status: str  # "open" | "in_progress" | "completed" | "cancelled"
+
 # ---------- routes ----------
 @api.get("/")
 async def root():
@@ -622,6 +628,26 @@ async def my_jobs(user=Depends(current_user)):
     cursor = db.jobs.find({"posted_by": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(200)
     return await cursor.to_list(length=200)
 
+@api.get("/jobs/hired")
+async def hired_jobs(user=Depends(current_user)):
+    """For workers: list of jobs where they have been accepted.
+    Used by attendance screen to pick which job they're checking in for.
+    Must be declared BEFORE /jobs/{job_id} to avoid shadowing."""
+    if user["role"] != "worker":
+        return []
+    apps = await db.applications.find(
+        {"worker_id": user["id"], "status": "accepted"},
+        {"_id": 0, "job_id": 1, "job_title": 1}
+    ).sort("created_at", -1).limit(50).to_list(length=50)
+    job_ids = list({a["job_id"] for a in apps})
+    if not job_ids:
+        return []
+    jobs = await db.jobs.find(
+        {"id": {"$in": job_ids}, "status": {"$in": ["in_progress", "open"]}},
+        {"_id": 0}
+    ).limit(50).to_list(length=50)
+    return jobs
+
 @api.get("/jobs/{job_id}")
 async def get_job(job_id: str):
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
@@ -669,6 +695,61 @@ async def job_applicants(job_id: str, user=Depends(current_user)):
         raise HTTPException(403, "Not your job")
     cursor = db.applications.find({"job_id": job_id}, {"_id": 0}).sort("created_at", -1).limit(200)
     return await cursor.to_list(length=200)
+
+@api.post("/applications/{app_id}/status")
+async def update_application_status(app_id: str, body: ApplicationStatusIn, user=Depends(current_user)):
+    """Job poster (client/contractor) accepts or rejects an applicant.
+    When accepted, worker can log attendance for that job."""
+    if body.status not in ("accepted", "rejected", "pending"):
+        raise HTTPException(400, "Invalid status")
+    appn = await db.applications.find_one({"id": app_id})
+    if not appn:
+        raise HTTPException(404, "Application not found")
+    job = await db.jobs.find_one({"id": appn["job_id"]})
+    if not job or job["posted_by"] != user["id"]:
+        raise HTTPException(403, "Not your job")
+    await db.applications.update_one(
+        {"id": app_id},
+        {"$set": {"status": body.status, "status_updated_at": now_iso()}}
+    )
+    # If job is still 'open' and we accepted someone, mark it in_progress
+    if body.status == "accepted" and job.get("status") == "open":
+        await db.jobs.update_one({"id": appn["job_id"]}, {"$set": {"status": "in_progress"}})
+    return {"ok": True, "status": body.status}
+
+@api.post("/jobs/{job_id}/status")
+async def update_job_status(job_id: str, body: JobStatusIn, user=Depends(current_user)):
+    """Poster updates job status. Allowed: open, in_progress, completed, cancelled."""
+    if body.status not in ("open", "in_progress", "completed", "cancelled"):
+        raise HTTPException(400, "Invalid status")
+    job = await db.jobs.find_one({"id": job_id})
+    if not job or job["posted_by"] != user["id"]:
+        raise HTTPException(403, "Not your job")
+    await db.jobs.update_one(
+        {"id": job_id},
+        {"$set": {"status": body.status, "status_updated_at": now_iso()}}
+    )
+    return {"ok": True, "status": body.status}
+
+@api.get("/workers/{worker_id}")
+async def worker_profile(worker_id: str, user=Depends(current_user)):
+    """Public worker profile (skills, rating, past-jobs count) for client/contractor to review."""
+    w = await db.users.find_one(
+        {"id": worker_id, "role": "worker"},
+        {"_id": 0, "password": 0}
+    )
+    if not w:
+        raise HTTPException(404, "Worker not found")
+    # Aggregate stats
+    completed = await db.applications.count_documents({"worker_id": worker_id, "status": "accepted"})
+    attendance_days = await db.attendance.count_documents({"worker_id": worker_id, "type": "check_in", "within_geofence": True})
+    ratings = await db.ratings.find({"target_user_id": worker_id}, {"_id": 0}).sort("created_at", -1).limit(20).to_list(length=20)
+    return {
+        **w,
+        "completed_jobs": completed,
+        "attendance_days": attendance_days,
+        "recent_ratings": ratings,
+    }
 
 # --- Attendance ---
 def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -1003,13 +1084,24 @@ async def chat_messages(peer_id: str, user=Depends(current_user)):
 async def payroll(month: Optional[str] = None, user=Depends(current_user)):
     if user["role"] not in ("contractor", "client", "admin"):
         raise HTTPException(403, "Only contractor/client/admin can view payroll")
-    # filter attendance by month YYYY-MM, default current month
     if not month:
         month = datetime.now(timezone.utc).strftime("%Y-%m")
-    att = await db.attendance.find(
-        {"type": "check_in", "created_at": {"$regex": f"^{month}"}, "within_geofence": True},
-        {"_id": 0, "selfie": 0}
-    ).to_list(length=2000)
+    # Get jobs posted by this user (unless admin - admin sees all)
+    my_job_ids: list = []
+    if user["role"] != "admin":
+        job_docs = await db.jobs.find({"posted_by": user["id"]}, {"_id": 0, "id": 1}).limit(500).to_list(length=500)
+        my_job_ids = [j["id"] for j in job_docs]
+        if not my_job_ids:
+            return {"month": month, "rows": [], "grand_total": 0}
+    # Filter attendance
+    att_query: dict = {
+        "type": "check_in",
+        "created_at": {"$regex": f"^{month}"},
+        "within_geofence": True,
+    }
+    if my_job_ids:
+        att_query["job_id"] = {"$in": my_job_ids}
+    att = await db.attendance.find(att_query, {"_id": 0, "selfie": 0}).limit(5000).to_list(length=5000)
     by_worker: dict = {}
     for a in att:
         wid = a["worker_id"]
@@ -1038,6 +1130,58 @@ async def payroll(month: Optional[str] = None, user=Depends(current_user)):
         })
     total = sum(r["total_wage"] for r in out)
     return {"month": month, "rows": sorted(out, key=lambda x: -x["total_wage"]), "grand_total": total}
+
+# --- Client/Contractor attendance monitoring ---
+@api.get("/attendance/my-workers")
+async def attendance_my_workers(days: int = 30, user=Depends(current_user)):
+    """For client/contractor: list of attendance entries by workers on their jobs (last N days)."""
+    if user["role"] not in ("client", "contractor", "admin"):
+        raise HTTPException(403, "Not allowed")
+    if user["role"] == "admin":
+        # Admin sees all recent attendance
+        q: dict = {}
+    else:
+        job_docs = await db.jobs.find({"posted_by": user["id"]}, {"_id": 0, "id": 1}).limit(500).to_list(length=500)
+        job_ids = [j["id"] for j in job_docs]
+        if not job_ids:
+            return []
+        q = {"job_id": {"$in": job_ids}}
+    cursor = db.attendance.find(q, {"_id": 0, "selfie": 0}).sort("created_at", -1).limit(days * 10)
+    return await cursor.to_list(length=days * 10)
+
+# --- Wallet withdrawal (worker cashes out earnings via mock UPI) ---
+class WithdrawIn(BaseModel):
+    amount: float
+    upi_id: str
+
+@api.post("/wallet/withdraw")
+async def wallet_withdraw(body: WithdrawIn, user=Depends(current_user)):
+    """Mock UPI withdrawal — deducts from wallet_balance, creates txn record.
+    In production this would call Razorpay Payout API."""
+    if body.amount <= 0:
+        raise HTTPException(400, "Invalid amount")
+    if "@" not in body.upi_id:
+        raise HTTPException(400, "Invalid UPI ID")
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if not fresh:
+        raise HTTPException(404, "User not found")
+    balance = float(fresh.get("wallet_balance", 0) or 0)
+    if body.amount > balance:
+        raise HTTPException(400, f"Insufficient balance (₹{balance:.2f})")
+    txn = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "type": "withdrawal",
+        "amount": -body.amount,
+        "upi_id": body.upi_id,
+        "status": "processing",
+        "note": f"UPI payout to {body.upi_id}",
+        "created_at": now_iso(),
+    }
+    await db.wallet_txns.insert_one(txn)
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"wallet_balance": -body.amount}})
+    txn.pop("_id", None)
+    return {"ok": True, "txn": txn, "new_balance": balance - body.amount}
 
 # --- AI Worker Recommendation (for client/contractor) ---
 @api.get("/ai/recommend-workers/{job_id}")

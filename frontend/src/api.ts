@@ -49,6 +49,15 @@ export const api = {
   apply: (b: any) => req("POST", "/applications", b),
   myApplications: () => req("GET", "/applications/mine"),
   jobApplicants: (jobId: string) => req("GET", `/applications/job/${jobId}`),
+  updateApplication: (appId: string, status: "accepted" | "rejected" | "pending") =>
+    req("POST", `/applications/${appId}/status`, { status }),
+  updateJobStatus: (jobId: string, status: "open" | "in_progress" | "completed" | "cancelled") =>
+    req("POST", `/jobs/${jobId}/status`, { status }),
+  hiredJobs: () => req("GET", "/jobs/hired"),
+  workerProfile: (wid: string) => req("GET", `/workers/${wid}`),
+  attendanceMyWorkers: (days = 30) => req("GET", `/attendance/my-workers?days=${days}`),
+  walletWithdraw: (amount: number, upi_id: string) =>
+    req("POST", "/wallet/withdraw", { amount, upi_id }),
   attendance: (b: any) => req("POST", "/attendance", b),
   myAttendance: () => req("GET", "/attendance/mine"),
   workers: (skill?: string) => req("GET", `/workers${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`),

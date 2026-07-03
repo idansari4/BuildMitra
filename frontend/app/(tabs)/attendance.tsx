@@ -8,7 +8,7 @@ import { Image } from "expo-image";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { colors, radius, spacing, type as t } from "@/src/theme";
-import { H2, Body, Muted, Card, PrimaryButton, SecondaryButton } from "@/src/ui";
+import { H2, Body, Muted, Card, PrimaryButton, SecondaryButton, Chip } from "@/src/ui";
 
 export default function Attendance() {
   const { user } = useAuth();
@@ -18,8 +18,21 @@ export default function Attendance() {
   const [history, setHistory] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [permErr, setPermErr] = useState("");
+  const [hiredJobs, setHiredJobs] = useState<any[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string>("self");
+  const [loadingJobs, setLoadingJobs] = useState(true);
 
-  useEffect(() => { (async () => { try { setHistory(await api.myAttendance()); } catch {} })(); }, []);
+  useEffect(() => {
+    (async () => {
+      try { setHistory(await api.myAttendance()); } catch {}
+      try {
+        const jobs = await api.hiredJobs();
+        setHiredJobs(jobs || []);
+        if (jobs && jobs.length > 0) setSelectedJobId(jobs[0].id);
+      } catch {}
+      setLoadingJobs(false);
+    })();
+  }, []);
 
   const grabLocation = async () => {
     setPermErr("");
@@ -48,7 +61,7 @@ export default function Attendance() {
     setBusy(true); setMsg("");
     try {
       await api.attendance({
-        job_id: "self",
+        job_id: selectedJobId,
         type: kind,
         lat: coords.lat, lng: coords.lng,
         selfie,
@@ -74,6 +87,43 @@ export default function Attendance() {
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 80, gap: spacing.md }}>
         <H2 testID="attendance-title">Attendance</H2>
         <Muted>GPS + Selfie verification keeps every check-in secure.</Muted>
+
+        {loadingJobs ? (
+          <Card><ActivityIndicator color={colors.brand} /></Card>
+        ) : hiredJobs.length === 0 ? (
+          <Card>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="information-circle" size={22} color={colors.warning} />
+              <View style={{ flex: 1 }}>
+                <Body style={{ fontWeight: "700" }}>No hired jobs yet</Body>
+                <Muted style={{ fontSize: 12, marginTop: 2 }}>
+                  Apply and get hired to log site-linked attendance. You can still check-in generically.
+                </Muted>
+              </View>
+            </View>
+          </Card>
+        ) : (
+          <Card>
+            <Body style={{ fontWeight: "700", marginBottom: 8 }}>Which job are you at?</Body>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+              <Chip
+                testID="job-self"
+                label="General (No job)"
+                selected={selectedJobId === "self"}
+                onPress={() => setSelectedJobId("self")}
+              />
+              {hiredJobs.map((j) => (
+                <Chip
+                  key={j.id}
+                  testID={`job-${j.id}`}
+                  label={j.title}
+                  selected={selectedJobId === j.id}
+                  onPress={() => setSelectedJobId(j.id)}
+                />
+              ))}
+            </ScrollView>
+          </Card>
+        )}
 
         <Card>
           <View style={styles.row}>
