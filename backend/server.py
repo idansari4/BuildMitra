@@ -684,6 +684,31 @@ async def hired_jobs(user=Depends(current_user)):
     ).limit(50).to_list(length=50)
     return jobs
 
+@api.get("/jobs/search")
+async def jobs_search(
+    min_wage: Optional[float] = None,
+    max_wage: Optional[float] = None,
+    skill: Optional[str] = None,
+    city: Optional[str] = None,
+    status: Optional[str] = "open",
+    _user=Depends(current_user),
+):
+    """Enhanced job filter. Declared BEFORE /jobs/{job_id} to avoid shadowing."""
+    q: dict = {"status": status or "open"}
+    wage_q: dict = {}
+    if min_wage is not None:
+        wage_q["$gte"] = float(min_wage)
+    if max_wage is not None:
+        wage_q["$lte"] = float(max_wage)
+    if wage_q:
+        q["daily_wage"] = wage_q
+    if skill:
+        q["skill"] = skill
+    if city:
+        q["location"] = {"$regex": city, "$options": "i"}
+    cur = db.jobs.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
+    return await cur.to_list(length=200)
+
 @api.get("/jobs/{job_id}")
 async def get_job(job_id: str):
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
@@ -1618,9 +1643,9 @@ async def forgot_password(body: ForgotPasswordIn):
         upsert=True,
     )
     # In prod, send via Twilio; in dev, just return the code
-    if _twilio_client and TWILIO_FROM:
+    if _twilio_client and os.getenv("TWILIO_FROM"):
         try:
-            _twilio_client.messages.create(body=f"BuildMitra password reset OTP: {code}", from_=TWILIO_FROM, to=f"+91{body.mobile}")
+            _twilio_client.messages.create(body=f"BuildMitra password reset OTP: {code}", from_=os.getenv("TWILIO_FROM"), to=f"+91{body.mobile}")
         except Exception as e:
             logger.warning("Twilio password OTP failed: %s", e)
     return {"ok": True, "dev_code": code if os.getenv("PROD_OTP") != "1" else None}
@@ -1744,7 +1769,7 @@ async def ratings_for_user(user_id: str, _user=Depends(current_user)):
 @api.get("/ratings/mine")
 async def my_ratings(user=Depends(current_user)):
     """Ratings this user has given."""
-    cur = db.ratings.find({"rater_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100)
+    cur = db.ratings.find({"by": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100)
     return await cur.to_list(length=100)
 
 # ---------- Leave Management ----------
@@ -1990,29 +2015,8 @@ async def admin_monitor(user=Depends(current_user)):
         "total_wallet_balance": tot_wallet,
     }
 
-# ---------- Enhanced Jobs Search ----------
-# Note: The existing GET /jobs already supports role-based filtering.
-# We now also accept optional query params for min_wage/max_wage/city/skill.
-@api.get("/jobs/search")
-async def jobs_search(
-    min_wage: Optional[float] = None,
-    max_wage: Optional[float] = None,
-    skill: Optional[str] = None,
-    city: Optional[str] = None,
-    status: Optional[str] = "open",
-    _user=Depends(current_user),
-):
-    q: dict = {"status": status or "open"}
-    if min_wage is not None:
-        q["daily_wage"] = q.get("daily_wage", {}) | {"$gte": float(min_wage)}
-    if max_wage is not None:
-        q["daily_wage"] = q.get("daily_wage", {}) | {"$lte": float(max_wage)}
-    if skill:
-        q["skill"] = skill
-    if city:
-        q["location"] = {"$regex": city, "$options": "i"}
-    cur = db.jobs.find(q, {"_id": 0}).sort("created_at", -1).limit(200)
-    return await cur.to_list(length=200)
+# ---------- Enhanced Jobs Search moved to top of jobs routes (before /jobs/{job_id})
+# to avoid path shadowing. See /jobs/search near line 687.
 
 # --- Seed ---
 async def seed():
