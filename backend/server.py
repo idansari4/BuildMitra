@@ -77,7 +77,6 @@ def verify_pw(pw: str, hashed: str) -> bool:
 
 # --------- Security helpers ---------
 _RATE_BUCKETS: dict = {}  # {(ip, key): [timestamps]}
-_RATE_LOCK = asyncio.Lock() if False else None  # per-process dict; single-worker prod
 
 def _client_ip(request) -> str:
     """Best-effort client IP extraction (behind proxy/ingress)."""
