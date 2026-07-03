@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -74,6 +74,63 @@ def verify_pw(pw: str, hashed: str) -> bool:
         return bcrypt.checkpw(pw.encode(), hashed.encode())
     except Exception:
         return False
+
+# --------- Security helpers ---------
+_RATE_BUCKETS: dict = {}  # {(ip, key): [timestamps]}
+_RATE_LOCK = asyncio.Lock() if False else None  # per-process dict; single-worker prod
+
+def _client_ip(request) -> str:
+    """Best-effort client IP extraction (behind proxy/ingress)."""
+    if not request:
+        return "unknown"
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+async def rate_limit(key: str, request, max_calls: int = 5, window_sec: int = 60):
+    """Simple sliding-window rate limiter keyed by (ip, key).
+    Raises 429 when exceeded. Do NOT use for high-traffic paths — this is
+    for auth/OTP/reset which have low legitimate frequency."""
+    ip = _client_ip(request)
+    bucket = _RATE_BUCKETS.setdefault((ip, key), [])
+    now_ts = datetime.now(timezone.utc).timestamp()
+    # Purge old entries
+    cutoff = now_ts - window_sec
+    while bucket and bucket[0] < cutoff:
+        bucket.pop(0)
+    if len(bucket) >= max_calls:
+        raise HTTPException(429, "Too many requests. Please wait a bit.")
+    bucket.append(now_ts)
+
+def require_role(*allowed_roles: str):
+    """FastAPI dependency: requires the current user has one of allowed_roles."""
+    async def _dep(user=Depends(current_user)):
+        if user.get("role") not in allowed_roles:
+            raise HTTPException(403, f"Requires role: {', '.join(allowed_roles)}")
+        return user
+    return _dep
+
+# Max sizes for upload validation
+MAX_PHOTO_B64_LEN = 4_000_000  # ~3 MB after base64 (data URLs)
+MAX_STRING_LEN = 5_000
+
+def sanitize_str(s: Optional[str], max_len: int = MAX_STRING_LEN) -> str:
+    """Strip control chars and enforce max length. Basic XSS defense."""
+    if not s:
+        return ""
+    s = str(s).strip()[:max_len]
+    # Remove null bytes and low-ascii control chars except newline/tab
+    return "".join(c for c in s if c == "\n" or c == "\t" or ord(c) >= 32)
+
+def validate_photo(s: Optional[str]) -> str:
+    if not s:
+        return ""
+    if len(s) > MAX_PHOTO_B64_LEN:
+        raise HTTPException(413, "Photo too large (max ~3MB). Please compress.")
+    if not (s.startswith("data:image/") or s == ""):
+        raise HTTPException(400, "Invalid image format. Use data URL.")
+    return s
 
 def make_token(user_id: str, role: str) -> str:
     payload = {
@@ -295,7 +352,8 @@ async def skills():
     return {"skills": SKILLS}
 
 @api.post("/auth/register")
-async def register(body: RegisterIn):
+async def register(body: RegisterIn, request: Request):
+    await rate_limit("register", request, max_calls=5, window_sec=60)
     if body.role not in ("worker", "contractor", "client"):
         raise HTTPException(400, "Invalid role")
     if len(body.mobile) < 10:
@@ -347,7 +405,8 @@ async def register(body: RegisterIn):
     return {"token": token, "user": user_resp}
 
 @api.post("/auth/login")
-async def login(body: LoginIn):
+async def login(body: LoginIn, request: Request):
+    await rate_limit("login", request, max_calls=10, window_sec=60)
     user = await db.users.find_one({"mobile": body.mobile})
     if not user or not verify_pw(body.password, user["password"]):
         raise HTTPException(401, "Invalid credentials")
@@ -368,7 +427,8 @@ def _normalise_mobile(m: str) -> str:
     raise HTTPException(400, "Invalid Indian mobile (10 digits)")
 
 @api.post("/auth/otp/send")
-async def otp_send(body: OtpSendIn):
+async def otp_send(body: OtpSendIn, request: Request):
+    await rate_limit("otp_send", request, max_calls=3, window_sec=60)
     e164 = _normalise_mobile(body.mobile)
     if TWILIO_ENABLED and _twilio_client:
         try:
@@ -1628,8 +1688,9 @@ async def log_activity(actor_id: str, actor_role: str, action: str, target_type:
 
 # ---------- Forgot Password ----------
 @api.post("/auth/forgot-password")
-async def forgot_password(body: ForgotPasswordIn):
+async def forgot_password(body: ForgotPasswordIn, request: Request):
     """Sends an OTP to the mobile for password reset. In dev mode, returns dev_code."""
+    await rate_limit("forgot_password", request, max_calls=10, window_sec=60)
     if not re.fullmatch(r"\d{10}", body.mobile or ""):
         raise HTTPException(400, "Invalid mobile")
     user = await db.users.find_one({"mobile": body.mobile})
@@ -1843,6 +1904,8 @@ async def add_progress_photo(body: ProgressPhotoIn, user=Depends(current_user)):
     job = await db.jobs.find_one({"id": body.job_id})
     if not job:
         raise HTTPException(404, "Job not found")
+    if body.photo:
+        body.photo = validate_photo(body.photo)
     rec = {
         "id": str(uuid.uuid4()),
         "job_id": body.job_id,
@@ -1851,7 +1914,7 @@ async def add_progress_photo(body: ProgressPhotoIn, user=Depends(current_user)):
         "uploader_name": user["name"],
         "uploader_role": user["role"],
         "photo": body.photo,
-        "caption": (body.caption or "").strip(),
+        "caption": sanitize_str(body.caption or "", 500),
         "lat": body.lat,
         "lng": body.lng,
         "created_at": now_iso(),
@@ -2128,10 +2191,15 @@ async def seed():
     logger.info("Seed done.")
 
 app.include_router(api)
+
+# CORS — allow specific origins in prod (via ALLOWED_ORIGINS env),
+# fall back to permissive "*" in dev so preview URLs work seamlessly.
+_allowed = os.getenv("ALLOWED_ORIGINS", "").strip()
+_origins: list = [o.strip() for o in _allowed.split(",") if o.strip()] if _allowed else ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -2148,18 +2216,77 @@ async def app_healthz():
 
 @app.on_event("startup")
 async def on_start():
-    """Run seed as a background task so startup completes immediately.
-    A small delay ensures K8s liveness/readiness probes see the app as
-    healthy before any CPU-bound work begins. Seed also pushes bcrypt
-    hashes to a thread pool to avoid blocking the event loop."""
-    async def _seed_safe():
+    """Run seed + create indexes as a background task so startup completes
+    immediately. K8s liveness/readiness probes see the app as healthy before
+    any CPU-bound / DB work begins."""
+    async def _boot_safe():
         try:
-            # Let probes hit /health a few times first
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(1.5)  # let probes hit /health first
+            await create_indexes()
             await seed()
         except Exception as e:
-            logger.exception("Seed failed (non-fatal, app continues): %s", e)
-    asyncio.create_task(_seed_safe())
+            logger.exception("Boot task failed (non-fatal): %s", e)
+    asyncio.create_task(_boot_safe())
+
+
+async def create_indexes():
+    """Create MongoDB indexes on hot query fields.
+    Idempotent — calling repeatedly is safe."""
+    try:
+        # Users: mobile lookup on every login; role for admin queries
+        await db.users.create_index("mobile", unique=True, sparse=True)
+        await db.users.create_index("role")
+        await db.users.create_index("id", unique=True)
+
+        # Jobs: posted_by + status filtering, geo/text search
+        await db.jobs.create_index("posted_by")
+        await db.jobs.create_index("status")
+        await db.jobs.create_index("skill")
+        await db.jobs.create_index([("created_at", -1)])
+        await db.jobs.create_index("id", unique=True)
+
+        # Applications: job_id, worker_id for status queries
+        await db.applications.create_index("job_id")
+        await db.applications.create_index("worker_id")
+        await db.applications.create_index([("worker_id", 1), ("status", 1)])
+        await db.applications.create_index("id", unique=True)
+
+        # Attendance: worker_id + created_at for history & payroll
+        await db.attendance.create_index([("worker_id", 1), ("created_at", -1)])
+        await db.attendance.create_index([("job_id", 1), ("created_at", -1)])
+        await db.attendance.create_index("id", unique=True)
+
+        # ERP
+        for coll in ("materials", "tools", "estimates", "bills"):
+            await db[coll].create_index("owner")
+            await db[coll].create_index([("created_at", -1)])
+
+        # Chat
+        await db.chat_messages.create_index([("thread_id", 1), ("created_at", -1)])
+
+        # Complaints
+        await db.complaints.create_index("by_user_id")
+        await db.complaints.create_index("status")
+
+        # Wallet
+        await db.wallet_txns.create_index([("user_id", 1), ("created_at", -1)])
+
+        # Phase 2 collections
+        await db.escrow.create_index("payer_id")
+        await db.escrow.create_index([("job_id", 1)])
+        await db.leaves.create_index([("worker_id", 1), ("status", 1)])
+        await db.leaves.create_index("approver_id")
+        await db.progress_photos.create_index([("job_id", 1), ("created_at", -1)])
+        await db.activity_log.create_index([("created_at", -1)])
+        await db.password_resets.create_index("mobile", unique=True)
+        # TTL: purge password resets after 15 minutes
+        try:
+            await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
+        except Exception:
+            pass
+        logger.info("Mongo indexes ensured.")
+    except Exception as e:
+        logger.warning("Index creation partially failed: %s", e)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

@@ -7,6 +7,7 @@ import { api } from "@/src/api";
 import { useT } from "@/src/i18n";
 import { colors, radius, spacing } from "@/src/theme";
 import { H2, Body, Muted, Card, Chip, PrimaryButton, Field } from "@/src/ui";
+import { EmptyState, SkeletonList } from "@/src/ux";
 
 type ComplaintRec = {
   id: string;
@@ -115,12 +116,16 @@ export default function Complaints() {
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator color={colors.brand} style={{ marginTop: 60 }} />
+            <SkeletonList rows={4} />
           ) : (
-            <View style={{ alignItems: "center", marginTop: 40 }}>
-              <Ionicons name="file-tray-outline" size={48} color={colors.borderStrong} />
-              <Muted style={{ marginTop: 8 }}>{tr("complaints.empty")}</Muted>
-            </View>
+            <EmptyState
+              testID="complaints-empty"
+              icon="file-tray-outline"
+              title={tr("complaints.empty")}
+              subtitle={tr("complaints.heroSub")}
+              actionLabel={tr("complaints.fileNew")}
+              onAction={openModal}
+            />
           )
         }
         renderItem={({ item }) => {

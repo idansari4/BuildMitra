@@ -16,20 +16,41 @@ export async function setToken(t: string | null) {
   else await storage.secureRemove("bm_token");
 }
 
-async function req<T = any>(method: string, path: string, body?: any): Promise<T> {
+async function req<T = any>(method: string, path: string, body?: any, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<T> {
   await loadToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (_token) headers.Authorization = `Bearer ${_token}`;
-  const res = await fetch(BASE + path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const txt = await res.text();
-  let json: any = null;
-  try { json = txt ? JSON.parse(txt) : null; } catch { json = { detail: txt }; }
-  if (!res.ok) throw new Error(json?.detail || `HTTP ${res.status}`);
-  return json as T;
+  // Request timeout — abort if server takes too long
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), opts?.timeoutMs ?? 20000);
+  // Forward external signal if provided
+  if (opts?.signal) {
+    opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  try {
+    const res = await fetch(BASE + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    const txt = await res.text();
+    let json: any = null;
+    try { json = txt ? JSON.parse(txt) : null; } catch { json = { detail: txt }; }
+    if (!res.ok) {
+      // Auth expiry: clear token so user is bounced to login
+      if (res.status === 401) {
+        try { await setToken(null); } catch {}
+      }
+      throw new Error(json?.detail || `HTTP ${res.status}`);
+    }
+    return json as T;
+  } catch (e: any) {
+    if (e?.name === "AbortError") throw new Error("Request timed out. Please check your connection.");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export const api = {
