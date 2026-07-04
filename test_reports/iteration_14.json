@@ -1,0 +1,67 @@
+{
+  "summary": "SPA-in-deployment fix PARTIALLY VERIFIED. Local SPA serving works perfectly: GET / returns HTML with #root div (1214B), entry-bd7258f1b2479c1463b6fc81d9b5ec7f.js serves 200 (2.84MB), favicon.ico 200, /random-route falls back to index.html (SPA fallback OK), /api/health returns {status:ok}. Backend logs confirm 'Mounting Expo web build from /app/frontend/dist' — fallback branch does NOT trigger. Regression: 115/116 passed on first run; the 1 failure (test_login_worker_client_admin) was a transient network timeout to preview URL and passed on retry — full 116/116 effectively pass. HOWEVER: The .gitignore fix is INCOMPLETE. `git check-ignore frontend/dist/index.html` returns exit 1 (good, top-level files un-ignored), BUT 37 out of 41 files in frontend/dist/ are STILL git-ignored because the `node_modules/` rule (line 8) matches the intermediate path `frontend/dist/assets/node_modules/...` — this includes ALL icon fonts (FontAwesome, Feather, MaterialIcons, MaterialCommunityIcons, Ionicons, etc.) and expo-router bundled assets. After user redeploys, the HTML+JS will serve but icons/fonts will be BROKEN in production.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "gitignore_issue": {
+    "priority": "CRITICAL",
+    "problem": "37 of 41 files in frontend/dist/ are still git-ignored due to `node_modules/` pattern in /app/.gitignore line 8 matching intermediate path `frontend/dist/assets/node_modules/...`",
+    "evidence": {
+      "total_files_in_dist": 41,
+      "files_ignored": 37,
+      "files_trackable": 4,
+      "trackable_files": [
+        "frontend/dist/index.html",
+        "frontend/dist/favicon.ico",
+        "frontend/dist/metadata.json",
+        "frontend/dist/_expo/static/js/web/entry-bd7258f1b2479c1463b6fc81d9b5ec7f.js"
+      ],
+      "sample_ignored": [
+        "frontend/dist/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome6_Regular.370dd5af19f8364907b6e2c41f45dbbf.ttf",
+        "frontend/dist/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ca4b48e04dc1ce10bfbddb262c8b835f.ttf",
+        "frontend/dist/assets/node_modules/expo-router/assets/error.d1ea1496f9057eb392d5bbf3732a61b7.png",
+        "frontend/dist/assets/node_modules/expo-router/assets/sitemap.412dd9275b6b48ad28f5e3d81bb1f626.png"
+      ]
+    },
+    "impact": "Production redeploy will still be missing 90% of Expo bundled assets — vector-icon fonts, expo-router assets, react-navigation icons. SPA will load but visuals will break (missing icons/glyphs).",
+    "recommended_fix": "Add explicit whitelist for the nested path in /app/.gitignore, e.g.:\n  !frontend/dist/assets/node_modules/\n  !frontend/dist/assets/node_modules/**\nOR globally: `!frontend/dist/` `!frontend/dist/**/*` placed AFTER the node_modules ignore lines (git patterns are order-sensitive but re-inclusion of files inside an ignored directory requires the parent dir to not be ignored — use `**` recursively).",
+    "verification_command": "cd /app && find frontend/dist -type f | while read f; do git check-ignore \"$f\" >/dev/null 2>&1 && echo IGNORED || echo OK; done | sort | uniq -c"
+  },
+  "spa_serving_verification": {
+    "root_returns_html": true,
+    "entry_js_200": true,
+    "favicon_200": true,
+    "spa_fallback_random_route": true,
+    "api_health_ok": true,
+    "backend_log_mounted_dist": true,
+    "fallback_json_message_absent": true
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase1_audit.py",
+    "/app/backend/tests/test_phase2_features.py",
+    "/app/backend/tests/test_phase3_hardening.py",
+    "/app/backend/tests/test_wallet_signs_iter13.py",
+    "/app/test_reports/pytest/iter14_regression.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix /app/.gitignore to also un-ignore frontend/dist/assets/node_modules/** so icon fonts and expo-router bundled assets get tracked. Verify by running: find frontend/dist -type f | xargs -I{} sh -c 'git check-ignore {} >/dev/null 2>&1 || echo OK {}' | wc -l — should equal 41.",
+    "After the .gitignore fix, git add /app/frontend/dist and commit before user redeploys."
+  ],
+  "critical_code_review_comments": [
+    ".gitignore fix from this iteration only covered top-level dist files. The recursive node_modules/ ignore pattern at line 8 supersedes deep re-inclusion because gitignore cannot re-include files inside an already-ignored directory unless the containing directory chain is also re-included."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A (backend-only test scope)"},
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes .gitignore for the nested node_modules path, re-run: 1) find frontend/dist -type f | while read f; do git check-ignore \"$f\" >/dev/null 2>&1 && echo IGNORED; done | wc -l — should be 0. 2) Re-run SPA smoke test (curl localhost:8001/). 3) Regression suite (test_phase1/2/3 + test_wallet_signs_iter13).",
+  "rca_of_issue": "RCA: Original bug was root .gitignore had `dist/` blocking whole path. Iter14 fix added `!frontend/dist/` and `!frontend/dist/**` un-ignore. BUT git .gitignore semantics: `**` re-inclusion cannot un-ignore files inside a directory whose name matches an earlier ignore rule (e.g., `node_modules/`). Because the Expo web build places bundled assets under `frontend/dist/assets/node_modules/@expo/vector-icons/...`, the `node_modules/` rule on line 8 keeps 37/41 files ignored. Reproduction: `git check-ignore frontend/dist/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome6_Regular.370dd5af19f8364907b6e2c41f45dbbf.ttf` → matches. Mitigation: Add explicit un-ignore for the nested path OR rename `node_modules/` rule to only match top-level using `/node_modules/` and remove line 8's `node_modules/`."
+}
