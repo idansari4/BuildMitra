@@ -1,0 +1,41 @@
+{
+  "summary": "Verified BuildMitra wallet transaction sign fix + final production readiness. Wallet display logic in /app/frontend/app/(tabs)/wallet.tsx (lines 91-107) correctly renders '+₹X' (green, colors.success) for credits (amt>=0) and '−₹X' (red, colors.error, Unicode minus) for debits using Math.abs(amt).toLocaleString(). Backend regression: 115/116 tests pass (99.1%). Wallet withdraw endpoint confirmed to create transactions with negative amount (verified end-to-end: worker withdraws 1 → txn.amount == -1 → frontend now renders as '−₹1' instead of buggy '+₹-1'). SPA serving verified with new bundle hash entry-bd7258f1b2479c1463b6fc81d9b5ec7f.js (200 OK). All 4 health endpoints (/api/health, /api/healthz, /health, /healthz) return 200. The single failure (test_phase1_audit.py::TestRegression::test_complaints_list) is a pre-existing test bug (calls /api/complaints which returns 404 — correct endpoint is /api/complaints/mine), completely unrelated to the wallet fix.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/complaints (test-only bug)", "issue": "test_phase1_audit.py::TestRegression::test_complaints_list uses wrong path — backend only exposes /api/complaints/mine (for user's own) and /api/admin/complaints (admin). Update the test to use /api/complaints/mine. Not a backend bug; pre-existing across iterations."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_wallet_signs_iter13.py",
+    "/app/test_reports/pytest/iter13_wallet.xml",
+    "/app/test_reports/pytest/iter13_phase1.xml",
+    "/app/test_reports/pytest/iter13_phase2.xml",
+    "/app/test_reports/pytest/iter13_phase3.xml"
+  ],
+  "action_items": [
+    "(Optional cleanup) Fix stale test test_phase1_audit.py::TestRegression::test_complaints_list — change endpoint from /api/complaints to /api/complaints/mine. Pre-existing across iterations, not blocking production."
+  ],
+  "critical_code_review_comments": [
+    "wallet.tsx sign fix looks clean: uses Number() coercion with 0 fallback, Math.abs() for magnitude, Unicode minus (−) instead of hyphen-minus for typographic correctness, and colors.success/error are theme-safe.",
+    "One micro nit (non-blocking): tx.note falls back to tx.type in the label. If tx.type is a machine-readable slug like 'wallet_withdraw', consider a small type→human-label map for polish; but this predates iter13."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_wallet_signs_iter13.py (created — 9 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "99.1% (115/116 total: 9/9 wallet + 29/30 phase1 [1 pre-existing test bug] + 52/52 phase2 + 25/25 phase3)",
+    "frontend": "visual spot-check verified per review_request; wallet.tsx code review confirms correct sign rendering"
+  },
+  "seed_data_creation": "None. Withdraw test creates one -1 wallet_txns row per run using auto-seeded worker (9000000002). Balance is drained by 1 rupee per run — negligible.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Wallet withdraw requires POST body {amount: int, upi_id: str}; missing upi_id → 422. Withdraw endpoint creates a wallet_txn with negative amount value (schema returns numeric int). Bundle hash after iter13 rebuild: entry-bd7258f1b2479c1463b6fc81d9b5ec7f.js. Phase suites must be run separately (rate limiter on /api/auth/login is 10/60s per-IP) — use X-Forwarded-For per test class if running combined. Pre-existing failing test (unrelated to any recent change): test_phase1_audit.py::TestRegression::test_complaints_list — endpoint should be /api/complaints/mine.",
+  "rca_of_issue": "Original bug: wallet.tsx unconditionally prefixed '+' to raw tx.amount, so a withdraw txn (amount=-1) rendered as '+₹-1'. Root cause: the display logic didn't branch on the numeric sign; it assumed all amounts were positive credits. Fix (verified): compute isCredit = Number(tx.amount) >= 0, then render `${isCredit ? '+' : '−'}₹${Math.abs(amt).toLocaleString()}` with matching color (green/red). Data source verified end-to-end: /api/wallet/withdraw does insert a wallet_txns doc with amount = -requested_amount (integer), so the frontend now correctly reads and formats the sign."
+}

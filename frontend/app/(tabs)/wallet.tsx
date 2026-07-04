@@ -88,17 +88,23 @@ export default function Wallet() {
         </View>
 
         <H2 style={{ marginTop: spacing.md }}>Recent Transactions</H2>
-        {data.transactions?.length ? data.transactions.map((tx: any) => (
-          <Card key={tx.id}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <View>
-                <Body style={{ fontWeight: "700" }}>{tx.note || tx.type}</Body>
-                <Muted style={{ marginTop: 2 }}>{new Date(tx.created_at).toLocaleDateString()}</Muted>
+        {data.transactions?.length ? data.transactions.map((tx: any) => {
+          const amt = Number(tx.amount) || 0;
+          const isCredit = amt >= 0;
+          return (
+            <Card key={tx.id}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Body style={{ fontWeight: "700" }} numberOfLines={2}>{tx.note || tx.type}</Body>
+                  <Muted style={{ marginTop: 2 }}>{new Date(tx.created_at).toLocaleDateString()}</Muted>
+                </View>
+                <Body style={{ color: isCredit ? colors.success : colors.error, fontWeight: "800", fontSize: t.lg }}>
+                  {isCredit ? "+" : "−"}₹{Math.abs(amt).toLocaleString()}
+                </Body>
               </View>
-              <Body style={{ color: colors.success, fontWeight: "800", fontSize: t.lg }}>+₹{tx.amount}</Body>
-            </View>
-          </Card>
-        )) : (
+            </Card>
+          );
+        }) : (
           <Muted>No transactions yet. Share your code to start earning!</Muted>
         )}
       </ScrollView>
