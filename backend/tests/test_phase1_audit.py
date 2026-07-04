@@ -72,7 +72,7 @@ class TestRegression:
         assert isinstance(r.json(), list)
 
     def test_complaints_list(self, s, client_auth):
-        r = s.get(f"{API}/complaints", headers=H(client_auth), timeout=15)
+        r = s.get(f"{API}/complaints/mine", headers=H(client_auth), timeout=15)
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
