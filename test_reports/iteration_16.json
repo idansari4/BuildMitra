@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 16: Final deployment-readiness regression health check. ALL 7 checkpoints PASS. Health endpoints (GET/HEAD /api/health, /api/healthz, /health, /healthz) return 200 {\"status\":\"ok\"} in <10ms on internal backend (port 8001). SPA serving from /app/frontend/dist works fully via backend mount: / serves index.html (1.2KB with #root div), entry-*.js served at 2.83MB, Ionicons.b4eb097d35f44ed943676fd56f6bdc51.ttf served at 389KB font/ttf, /random-route → SPA fallback (index.html), /favicon.ico → 200 image/x-icon 14.5KB, /api/nonexistent → JSON 404 {\"detail\":\"Not Found\"}. Dist files: 42 total, 0 ignored (whitelist working). frontend/node_modules still correctly ignored (git check-ignore exit 0). Backend startup logs confirm 'Mongo indexes ensured' AND 'Mounting Expo web build from /app/frontend/dist' (no fallback branch). Pytest regression: 116/116 pass (test_phase1_audit=30/30, test_phase2_features=52/52, test_phase3_hardening=25/25, test_wallet_signs_iter13=9/9). Initial run had 3 transient 429s in test_phase3_hardening::TestSmokeNoBreakage from prior rate-limit tests consuming the login-per-IP quota — all 4 smoke tests passed cleanly after 65s sleep (rate limiter reset). Manual E2E smoke on public URL: worker login (9000000002/demo1234) → JWT ✓, /api/me returns Ramesh Kumar/worker ✓, /api/jobs returns 16 jobs ✓, /api/wallet returns balance=10538 with 23 txns (correctly signed: -1.0 for withdrawal, +1000 for wage credit) ✓, POST /api/complaints (subject/description schema) creates complaint with id/status=open ✓, /api/complaints/mine includes new complaint ✓, admin login (9000000000/admin1234) → JWT ✓, /api/admin/monitor returns aggregated stats {users:{total:44,workers:40,contractors:2,clients:1,aadhaar_verified:9}, jobs:{total:37,open:16,in_progress:9,completed:8}, complaints_open, escrow_held, progress_photos, leaves_pending, total_wallet_balance} ✓. NOTE on public URL routing: /health and /healthz (without /api) go to Expo dev server (port 3000) via K8s ingress and return SPA HTML — this is expected preview behavior; in deployment the backend serves everything on 8001 and both non-api /health and /healthz return proper JSON (verified via localhost:8001 curl). Deployment code is READY.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase1_audit.py",
+    "/app/backend/tests/test_phase2_features.py",
+    "/app/backend/tests/test_phase3_hardening.py",
+    "/app/backend/tests/test_wallet_signs_iter13.py",
+    "/app/test_reports/pytest/iter16_regression.xml"
+  ],
+  "action_items": [
+    "Deploy-ready. No code changes required. Supervisor --tunnel flag is Emergent platform managed (out-of-scope per system prompt).",
+    "Optional (non-blocking): The 3 TestSmokeNoBreakage cases in test_phase3_hardening.py share IP rate limit with the preceding TestRateLimit cases; consider adding time.sleep(60) or unique X-Forwarded-For headers between TestRateLimit and TestSmokeNoBreakage classes to eliminate transient 429s in single-shot runs."
+  ],
+  "critical_code_review_comments": [
+    "Backend server.py: startup wiring correctly logs 'Mongo indexes ensured.' and 'Mounting Expo web build from /app/frontend/dist' — no 'web build missing' warning fires. Both indexes and SPA mount happen in proper startup sequence.",
+    "SPA fallback middleware returns application/json 404 for /api/* paths and serves index.html for non-/api paths — correctly separating API 404s from client-side routes.",
+    "wallet.withdraw creates a negative-amount transaction (verified: -1.0 sample amount in mock UPI dev mode) — mocked by design as per system context."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (116/116 after rate-limit-cooldown retry)", "frontend": "N/A (backend-only requested)"},
+  "seed_data_creation": "Created 1 TEST_deployment_regression complaint via smoke test, cleaned up via direct pymongo delete_many at end of run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "For any future regression run: (1) the 4 test files pass 116/116 individually; the ONLY intermittent noise is 3 transient 429s in test_phase3_hardening::TestSmokeNoBreakage when the whole file is run in one shot after TestRateLimit — always retry those 4 smoke tests after 65s sleep. (2) POST /api/complaints uses schema {subject, description} NOT {title, description} — the frontend/UI creates with subject. (3) Public preview URL routes /health and /healthz (non-/api) to Expo dev server so they return HTML; internal backend on port 8001 (deploy config) returns JSON on all 4 endpoints. (4) Ionicons font path: /assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.b4eb097d35f44ed943676fd56f6bdc51.ttf (~390KB). (5) Entry JS: /_expo/static/js/web/entry-bd7258f1b2479c1463b6fc81d9b5ec7f.js (~2.83MB).",
+  "rca_of_issue": "N/A — pure verification pass; no bugs found; all 7 review checkpoints pass. The single caveat is the well-documented rate-limiter test-ordering interaction (transient, self-healing) which the review request explicitly acknowledged."
+}
