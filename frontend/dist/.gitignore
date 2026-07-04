@@ -1,0 +1,6 @@
+# Un-ignore EVERYTHING in this dist folder including nested assets/node_modules
+# (which contains font glyphs bundled by Expo for the web build).
+# Nested .gitignore rules WIN over parent rules for their scope.
+!*
+!**
+!.gitignore

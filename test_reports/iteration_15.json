@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 15: Verified final SPA deployment inclusion fix. All 5 verification checks passed. 0 of 42 dist files are git-ignored (was 37 in iter14). frontend/node_modules & backend/node_modules remain correctly ignored (critical to prevent GB-sized deploy). SPA serves fully: /, /api/health, entry-*.js (2.83MB), and Ionicons.ttf font (389KB) all return 200. Backend startup log shows 'Mounting Expo web build from /app/frontend/dist' (fallback branch NOT firing). Regression suite: 116/116 tests pass across test_phase1_audit, test_phase2_features, test_phase3_hardening, test_wallet_signs_iter13 (initial run had 4 transient network timeouts on external preview URL from rate limiting; all passed on retry after 10s sleep).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase1_audit.py",
+    "/app/backend/tests/test_phase2_features.py",
+    "/app/backend/tests/test_phase3_hardening.py",
+    "/app/backend/tests/test_wallet_signs_iter13.py",
+    "/app/test_reports/pytest/iter15_regression.xml"
+  ],
+  "action_items": [
+    "Ready to Publish — deployment build should now include all 41 dist files + nested .gitignore = 42 total"
+  ],
+  "critical_code_review_comments": [
+    "Nested /app/frontend/dist/.gitignore correctly overrides parent node_modules rule for the dist scope only.",
+    "Root .gitignore made node_modules path-specific (/node_modules, /frontend/node_modules/, /backend/node_modules/) — actual dep trees remain ignored while dist/assets/node_modules/ font glyphs are trackable.",
+    "frontend/.gitignore still contains generic 'node_modules/' rule which correctly ignores frontend/node_modules (verified via `git check-ignore -v` output: 'frontend/.gitignore:4:node_modules/')."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A (backend-only testing requested)"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Verification checklist for SPA deployment inclusion: (1) `find frontend/dist -type f | while read f; do git check-ignore \"$f\" >/dev/null 2>&1 && echo IGNORED; done | wc -l` must be 0. (2) `git check-ignore frontend/node_modules/react/package.json` must exit 0 (still ignored — critical). (3) curl localhost:8001/ returns HTML w/ id=\"root\"; entry-*.js and Ionicons*.ttf return 200. (4) Backend log has 'Mounting Expo web build from /app/frontend/dist'. External preview URL (buildmitra.preview.emergentagent.com) can experience transient timeouts under rate limiting — retry with sleep 10s.",
+  "rca_of_issue": "Verification-only iteration. Iter14 root cause: root .gitignore had generic 'node_modules/' rule that matched intermediate path 'frontend/dist/assets/node_modules/' (bundled Expo vector-icon font glyphs), causing 37/41 dist files to be silently ignored despite whitelist. Fix combined two mechanisms: (a) made root node_modules rules path-specific to /node_modules, /frontend/node_modules/, /backend/node_modules/ so the substring 'node_modules' inside dist stops matching; (b) added nested /app/frontend/dist/.gitignore with '!*' '!**' '!.gitignore' — a nested .gitignore's un-ignore rules take precedence over ancestor ignore rules for its own scope, providing a defense-in-depth guarantee. Verified via `git check-ignore` returning exit 1 for the Ionicons.ttf font path and exit 0 (still ignored) for frontend/node_modules/react/package.json."
+}

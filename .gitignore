@@ -4,9 +4,11 @@
 .idea/
 .vscode/
 
-# Dependencies
-node_modules/
+# Dependencies — path-specific so Expo web build's assets/node_modules/ (fonts, glyphs) survives
 /node_modules
+/node_modules/
+/frontend/node_modules/
+/backend/node_modules/
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -28,9 +30,14 @@ next-env.d.ts
 # Production builds
 /build
 # NOTE: frontend/dist/ MUST be included in deployment (backend serves SPA from it).
-# Removed generic `dist/` ignore — the whitelist below un-ignores frontend/dist.
+# Removed generic `dist/` ignore — the whitelist below un-ignores frontend/dist
+# including its nested assets/node_modules subpath (font glyphs, expo-router assets).
 !frontend/dist/
 !frontend/dist/**
+!frontend/dist/assets/
+!frontend/dist/assets/**
+!frontend/dist/assets/node_modules/
+!frontend/dist/assets/node_modules/**
 
 # Environment files (comprehensive coverage)
 
