@@ -39,20 +39,46 @@ export function SecondaryButton({ label, onPress, testID, style }: { label: stri
 export function Field({
   label, value, onChangeText, placeholder, secureTextEntry, keyboardType, testID, multiline,
 }: { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string; secureTextEntry?: boolean; keyboardType?: any; testID?: string; multiline?: boolean }) {
+  const [visible, setVisible] = React.useState(false);
+  const isPassword = !!secureTextEntry;
+  const hideText = isPassword && !visible;
   return (
     <View style={{ marginBottom: spacing.md }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        testID={testID}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.onSurfaceSecondary}
-        secureTextEntry={secureTextEntry}
-        keyboardType={keyboardType}
-        multiline={multiline}
-        style={[styles.input, multiline && { minHeight: 96, textAlignVertical: "top" }]}
-      />
+      <View style={styles.inputWrap}>
+        <TextInput
+          testID={testID}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={colors.onSurfaceSecondary}
+          secureTextEntry={hideText}
+          keyboardType={keyboardType}
+          multiline={multiline}
+          autoCapitalize={isPassword ? "none" : undefined}
+          autoCorrect={isPassword ? false : undefined}
+          style={[
+            styles.input,
+            multiline && { minHeight: 96, textAlignVertical: "top" },
+            isPassword && { paddingRight: 44 },
+          ]}
+        />
+        {isPassword ? (
+          <Pressable
+            testID={testID ? `${testID}-toggle` : "password-toggle"}
+            onPress={() => setVisible((v) => !v)}
+            hitSlop={12}
+            style={styles.eyeBtn}
+            accessibilityLabel={visible ? "Hide password" : "Show password"}
+          >
+            <Ionicons
+              name={visible ? "eye-off" : "eye"}
+              size={22}
+              color={colors.onSurfaceSecondary}
+            />
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -99,10 +125,15 @@ const styles = StyleSheet.create({
   },
   btnSecText: { color: colors.onSurface, fontSize: type.base, fontWeight: "600" },
   label: { fontSize: type.sm, color: colors.onSurfaceSecondary, marginBottom: 6, fontWeight: "600" },
+  inputWrap: { position: "relative", justifyContent: "center" },
   input: {
     borderWidth: 1, borderColor: colors.border, borderRadius: radius.md,
     paddingHorizontal: 14, paddingVertical: 14, fontSize: type.base,
     color: colors.onSurface, backgroundColor: colors.surface,
+  },
+  eyeBtn: {
+    position: "absolute", right: 10, top: 0, bottom: 0,
+    width: 36, alignItems: "center", justifyContent: "center",
   },
   chip: {
     paddingHorizontal: 14, height: 36, borderRadius: radius.pill,
