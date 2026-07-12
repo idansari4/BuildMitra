@@ -52,6 +52,9 @@ const dict: Record<string, { en: string; hi: string }> = {
   "auth.namePlaceholder": { en: "e.g. Ramesh Kumar", hi: "जैसे रमेश कुमार" },
   "auth.minPw": { en: "min 4 chars", hi: "न्यूनतम 4 अक्षर" },
   "auth.fillAll": { en: "Fill all fields. Mobile 10 digits, password 4+ chars.", hi: "सभी फ़ील्ड भरें। मोबाइल 10 अंक, पासवर्ड 4+ अक्षर।" },
+  "auth.selectRole": { en: "I am a…", hi: "मैं हूं…" },
+  "auth.selectRoleSub": { en: "Choose how you want to use BuildMitra", hi: "चुनें कि आप BuildMitra का उपयोग कैसे करना चाहते हैं" },
+  "auth.roleRequired": { en: "Please select your role to continue.", hi: "जारी रखने के लिए अपनी भूमिका चुनें।" },
 
   // Home (worker)
   "home.welcomeBack": { en: "Welcome back", hi: "वापस स्वागत है" },

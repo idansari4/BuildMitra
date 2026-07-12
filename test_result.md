@@ -101,3 +101,49 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: Add explicit Role Selection (Worker / Contractor / Client) column on the Create New Account (Register) screen so users can clearly identify who they are during signup.
+
+frontend:
+  - task: "Role selection on Register screen"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/(auth)/register.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added 3 role selection cards (Worker/Contractor/Client) with icons, description, and radio indicator above Name/Mobile/Password fields. Default = worker (or from route param). Selection required before submit; role is sent in register payload."
+
+backend:
+  - task: "POST /auth/register accepts role field"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "RegisterIn model already includes `role` string field and validates it against worker/contractor/client. No backend change required, but should be re-verified end-to-end with new UI payload."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Role selection on Register screen"
+    - "POST /auth/register accepts role field"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "Implemented explicit role selector on register screen. Please test: (1) The 3 role cards render with icons+desc and one is always selected (worker by default). (2) Tapping any card visually highlights it (border+bg color + checkmark). (3) Register submit sends selected role — verify by registering a fresh Contractor via mobile 9111111111 / password test1234 and checking that GET /auth/me returns role=contractor. (4) Try registering worker/client too with unique mobile numbers. (5) Ensure existing demo logins (9000000002/9000000001/9000000003/9000000000) still work unchanged."
