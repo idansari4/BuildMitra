@@ -195,6 +195,7 @@ class ProfileUpdate(BaseModel):
     photo: Optional[str] = None  # base64
     skills: Optional[List[str]] = None
     experience_years: Optional[int] = None
+    experience_level: Optional[str] = None  # Full trained / Semi trained / Helper / Supervisor
     daily_wage: Optional[int] = None
     available: Optional[bool] = None
     city: Optional[str] = None

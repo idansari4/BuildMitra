@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Image, Alert, ActionSheetIOS } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Image, Alert, ActionSheetIOS, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -7,7 +7,7 @@ import * as ImagePicker from "expo-image-picker";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
-import { colors, radius, spacing, SKILLS, type as t } from "@/src/theme";
+import { colors, radius, spacing, SKILLS, EXPERIENCE_LEVELS, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card, Chip, PrimaryButton, Field, SecondaryButton } from "@/src/ui";
 
 export default function Profile() {
@@ -16,6 +16,12 @@ export default function Profile() {
   const { t: tr, lang, setLang } = useT();
   const isWorker = user?.role === "worker";
   const [skills, setSkills] = useState<string[]>(user?.skills || []);
+  const [experienceLevel, setExperienceLevel] = useState<string>(
+    (user as any)?.experience_level || ""
+  );
+  const [available, setAvailable] = useState<boolean>(
+    (user as any)?.available !== false // default true if undefined
+  );
   const [wage, setWage] = useState(String(user?.daily_wage || ""));
   const [city, setCity] = useState(user?.city || "");
   const [company, setCompany] = useState(user?.company_name || "");
@@ -62,11 +68,25 @@ export default function Profile() {
 
   const toggleSkill = (s: string) => setSkills((cur) => cur.includes(s) ? cur.filter(x => x !== s) : [...cur, s]);
 
+  const toggleAvailability = async (val: boolean) => {
+    setAvailable(val);
+    try {
+      await api.updateMe({ available: val });
+      await refresh();
+    } catch {
+      // revert on error
+      setAvailable(!val);
+      setMsg(tr("common.failed"));
+    }
+  };
+
   const save = async () => {
     setBusy(true); setMsg("");
     try {
       await api.updateMe({
         skills,
+        experience_level: experienceLevel || null,
+        available,
         daily_wage: parseInt(wage) || 0,
         experience_years: parseInt(exp) || 0,
         city,
@@ -202,14 +222,74 @@ export default function Profile() {
 
         {isWorker ? (
           <>
+            {/* Availability toggle */}
+            <Card testID="availability-card">
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View
+                  style={[
+                    styles.availIcon,
+                    { backgroundColor: available ? "#DCFCE7" : "#FEE2E2" },
+                  ]}
+                >
+                  <Ionicons
+                    name={available ? "checkmark-circle" : "close-circle"}
+                    size={22}
+                    color={available ? colors.success : colors.error}
+                  />
+                </View>
+                <View style={{ flex: 1, marginHorizontal: 12 }}>
+                  <Body style={{ fontWeight: "800" }}>Availability</Body>
+                  <Muted style={{ fontSize: 12, marginTop: 2 }}>
+                    {available
+                      ? "You are visible to clients for new work"
+                      : "You will not receive new job offers"}
+                  </Muted>
+                </View>
+                <Switch
+                  testID="availability-toggle"
+                  value={available}
+                  onValueChange={toggleAvailability}
+                  trackColor={{ false: colors.border, true: colors.brand }}
+                  thumbColor={colors.surface}
+                  ios_backgroundColor={colors.border}
+                />
+              </View>
+            </Card>
+
+            {/* Job title */}
             <Card>
-              <Body style={{ fontWeight: "700", marginBottom: 10 }}>{tr("profile.mySkills")}</Body>
+              <Body style={{ fontWeight: "700", marginBottom: 4 }} testID="section-job-title">Job title</Body>
+              <Muted style={{ fontSize: 12, marginBottom: 10 }}>Select all trades you can do</Muted>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {SKILLS.map((s) => (
-                  <Chip key={s} testID={`profile-skill-${s}`} label={s} selected={skills.includes(s)} onPress={() => toggleSkill(s)} />
+                  <Chip
+                    key={s}
+                    testID={`profile-jobtitle-${s}`}
+                    label={s}
+                    selected={skills.includes(s)}
+                    onPress={() => toggleSkill(s)}
+                  />
                 ))}
               </View>
             </Card>
+
+            {/* My skills (experience level) */}
+            <Card>
+              <Body style={{ fontWeight: "700", marginBottom: 4 }} testID="section-my-skills">My skills</Body>
+              <Muted style={{ fontSize: 12, marginBottom: 10 }}>Choose your experience level</Muted>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {EXPERIENCE_LEVELS.map((lvl) => (
+                  <Chip
+                    key={lvl}
+                    testID={`profile-skill-level-${lvl}`}
+                    label={lvl}
+                    selected={experienceLevel === lvl}
+                    onPress={() => setExperienceLevel(experienceLevel === lvl ? "" : lvl)}
+                  />
+                ))}
+              </View>
+            </Card>
+
             <Field testID="wage-field" label={tr("profile.expectedWage")} value={wage} onChangeText={setWage} keyboardType="number-pad" />
             <Field testID="exp-field" label={tr("profile.experience")} value={exp} onChangeText={setExp} keyboardType="number-pad" />
             <Field testID="city-field" label={tr("profile.city")} value={city} onChangeText={setCity} placeholder={tr("profile.cityPh")} />
@@ -464,4 +544,11 @@ const styles = StyleSheet.create({
   testHint: { flexDirection: "row", alignItems: "center", marginTop: 8, padding: 10, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   modalCta: { padding: spacing.md, paddingBottom: spacing.xl, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
   payrollLink: { flexDirection: "row", alignItems: "center", padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, marginBottom: 8 },
+  availIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

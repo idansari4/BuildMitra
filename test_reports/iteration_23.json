@@ -1,0 +1,28 @@
+{
+  "summary": "Iter 23 Worker Profile UI + backend changes fully verified. Backend: 6/6 pytest cases pass (experience_level accepted, availability toggle idempotent, skills list persisted, wage/exp/city regression OK). Frontend: Availability card with icon+heading+toggle renders; toggling issues PUT /api/me with {available:false/true} and swaps descriptive text between 'You are visible to clients for new work' and 'You will not receive new job offers'. Section headings exact: 'Job title' + 'Select all trades you can do' and 'My skills' + 'Choose your experience level'. All 11 required job-title chips (Mason, Fabrication Worker, Marbal Mason, Marbal Ghisai Worker, Shuttering Carpenter, Wood Polisher, Gypsum Worker, Glass Installer, AC Technician, CCTV Installer, Duct Installer) present; Helper/Welder/Site Supervisor absent from job-titles. Exactly 4 experience-level chips (Full trained/Semi trained/Helper/Supervisor); single-select behaviour verified (only one highlighted at a time; re-tap same clears). Save flow issues one PUT containing skills[], experience_level, available, daily_wage, experience_years, city -> 'Saved ✓' toast displayed. Reload persistence verified: wage=800, exp=6, city=Pune, Mason/Marbal Mason/AC Technician + Full trained chips remain highlighted (bg #FDE68A). Regression links (avatar-edit, profile-name, help-support-link, change-password-link, salary-summary-link, leave-link) all present.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter23_worker_profile.py",
+    "/app/test_reports/pytest/iter23_worker_profile.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "profile.tsx line 88 sends `experience_level: experienceLevel || null` on save. Backend filters None fields (line 674 server.py) so an intentional clear (deselecting the chip) will NOT be persisted server-side. Consider sending empty string instead, or handle explicit null clear in backend. Non-blocking for this iter's scope.",
+    "server.py update_me uses `{k: v for k, v in body.model_dump().items() if v is not None}` so any field cannot be cleared to null via PUT. This is a general pre-existing limitation, not introduced by iter 23."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter23_worker_profile.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "No new seed data. Worker Ramesh Kumar profile mutated (skills=[Mason,AC Technician,Marbal Mason], experience_level=Full trained, daily_wage=800, experience_years=6, city=Pune, available=true).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 23 changes cover only Worker Profile UI + ProfileUpdate.experience_level. All target testIDs present: availability-card, availability-toggle, section-job-title, section-my-skills, profile-jobtitle-<Skill> (20 SKILLS), profile-skill-level-<Level> (4 EXPERIENCE_LEVELS). SKILLS list in theme.ts has 20 entries; EXPERIENCE_LEVELS has 4. GET /api/me is the endpoint (NOT /api/auth/me).",
+  "rca_of_issue": "N/A - no bugs found."
+}

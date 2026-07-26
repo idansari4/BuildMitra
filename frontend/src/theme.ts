@@ -39,9 +39,19 @@ export const type = {
 };
 
 export const SKILLS = [
-  "Mason", "Helper", "Painter", "Electrician", "Plumber", "Carpenter",
-  "Welder", "Tile Worker", "POP Worker", "Steel Fixer",
-  "Scaffolding Worker", "Concrete Worker", "Site Supervisor",
+  "Mason", "Painter", "Electrician", "Plumber", "Carpenter",
+  "Tile Worker", "POP Worker", "Steel Fixer",
+  "Scaffolding Worker", "Concrete Worker",
+  "Fabrication Worker", "Marbal Mason", "Marbal Ghisai Worker",
+  "Shuttering Carpenter", "Wood Polisher", "Gypsum Worker",
+  "Glass Installer", "AC Technician", "CCTV Installer", "Duct Installer",
+];
+
+export const EXPERIENCE_LEVELS = [
+  "Full trained",
+  "Semi trained",
+  "Helper",
+  "Supervisor",
 ];
 
 export const SKILL_IMAGES: Record<string, string> = {

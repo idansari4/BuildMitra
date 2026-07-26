@@ -177,6 +177,18 @@ frontend:
           agent: "main"
           comment: "Added a Leave link card at the top of the Attendance screen. For worker: 'Leave Requests — Apply for leave · Track approval status' (testID request-leave-link). For client/contractor/admin (Monitor view): 'Leave Inbox — Approve or reject worker leave requests' (testID leave-inbox-link). Both navigate to /leave route (which is a fully-working screen from prior iterations)."
 
+  - task: "Worker Profile — Job title rename, new skill levels, Availability toggle"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/(tabs)/profile.tsx, /app/frontend/src/theme.ts, /app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Iter 23. (1) Renamed 'My skills' section heading to 'Job title'. Updated SKILLS list: removed Helper, Welder, Site Supervisor; added Fabrication Worker, Marbal Mason, Marbal Ghisai Worker, Shuttering Carpenter, Wood Polisher, Gypsum Worker, Glass Installer, AC Technician, CCTV Installer, Duct Installer. Selection is still multi-select — Chip testIDs are now `profile-jobtitle-<name>`. (2) Added NEW 'My skills' section (single-select) with 4 experience levels via new EXPERIENCE_LEVELS constant: Full trained, Semi trained, Helper, Supervisor (testIDs `profile-skill-level-<name>`). Persisted to backend field `experience_level` (added to ProfileUpdate model). Empty selection allowed (tap same chip to clear). (3) Added Availability toggle Switch at top of worker sections (testID `availability-toggle`) — persists instantly via PUT /me { available: bool } and reverts on failure. Card testID `availability-card`. Text updates based on state ('You are visible…' vs 'You will not receive…')."
+
 backend:
   - task: "POST /auth/register accepts role field"
     implemented: true
