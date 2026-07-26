@@ -99,17 +99,17 @@ export function Card({ children, style, testID }: { children: React.ReactNode; s
   return <View testID={testID} style={[styles.card, style]}>{children}</View>;
 }
 
-export function H1({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
-  return <Text style={[styles.h1, style]}>{children}</Text>;
+export function H1({ children, style, testID }: { children: React.ReactNode; style?: TextStyle; testID?: string }) {
+  return <Text testID={testID} style={[styles.h1, style]}>{children}</Text>;
 }
-export function H2({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
-  return <Text style={[styles.h2, style]}>{children}</Text>;
+export function H2({ children, style, testID }: { children: React.ReactNode; style?: TextStyle; testID?: string }) {
+  return <Text testID={testID} style={[styles.h2, style]}>{children}</Text>;
 }
-export function Body({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
-  return <Text style={[styles.body, style]}>{children}</Text>;
+export function Body({ children, style, testID }: { children: React.ReactNode; style?: TextStyle; testID?: string }) {
+  return <Text testID={testID} style={[styles.body, style]}>{children}</Text>;
 }
-export function Muted({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
-  return <Text style={[styles.muted, style]}>{children}</Text>;
+export function Muted({ children, style, testID }: { children: React.ReactNode; style?: TextStyle; testID?: string }) {
+  return <Text testID={testID} style={[styles.muted, style]}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({

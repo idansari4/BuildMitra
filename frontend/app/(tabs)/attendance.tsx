@@ -431,7 +431,7 @@ function WorkerAttendance() {
 
 /* ---------------------- CLIENT/CONTRACTOR/ADMIN VIEW ---------------------- */
 
-function MonitorAttendance({ role }: { role: string }) {
+export function MonitorAttendance({ role }: { role: string }) {
   const [days, setDays] = useState(1);
   const [rows, setRows] = useState<AttRec[]>([]);
   const [loading, setLoading] = useState(true);

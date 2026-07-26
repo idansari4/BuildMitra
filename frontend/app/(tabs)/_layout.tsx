@@ -48,9 +48,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="attendance"
         options={{
-          title: t("tab.attendance"),
-          tabBarIcon: ({ color, size }) => <Ionicons name="finger-print" size={size} color={color} />,
-          href: isWorker ? "/(tabs)/attendance" : null,
+          title: isWorker ? t("tab.attendance") : "Monitor",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={isWorker ? "finger-print" : "pulse"} size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
