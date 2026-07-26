@@ -141,6 +141,18 @@ frontend:
           agent: "main"
           comment: "Added backend endpoints GET /api/attendance/export/csv and /api/attendance/export/pdf. Both accept days (int) and scope ('mine'|'workers'). scope='mine' for workers only (403 for others); scope='workers' for client/contractor (their jobs) and admin (all). PDF built with reportlab (landscape A4 with summary block + detail table). CSV uses stdlib csv. Frontend adds ExportBar with CSV+PDF pills in (a) Worker's Recent section header (b) Monitor view's filter row. downloadExport utility handles web (blob URL download) and native (expo-file-system + expo-sharing)."
 
+  - task: "Wallet module completion (Top-up + Withdraw + Referral stats + rich transactions)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/(tabs)/wallet.tsx, /app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "BUG FIX + Completion. Prior wallet had PaymentSheet imported but NEVER RENDERED — top-up buttons did nothing. Rewrote wallet screen with (a) PaymentSheet correctly wired to quick topup buttons. (b) NEW Custom Top-up bottom sheet (₹10 – ₹1,00,000 with preset chips + 5 presets). (c) NEW Withdraw modal with amount + UPI ID (regex validated) + 25/50/100% presets + success confirmation screen (calls /wallet/withdraw). (d) Money-flow mini stats (credited/debited totals) on hero card. (e) Referral stats row on hero card (Invited count + Earned ₹) via NEW backend GET /api/wallet/referral-stats. (f) Tap-to-copy referral code (web). (g) Filter chips (All/Money In/Money Out) for transactions. (h) Type-based transaction icons (referral=gift purple, salary=cash green, withdraw=up-red, topup=down-green, erp=briefcase-blue). (i) Pull-to-refresh. (j) Improved empty state."
+
 backend:
   - task: "POST /auth/register accepts role field"
     implemented: true

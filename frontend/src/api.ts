@@ -145,6 +145,7 @@ export const api = {
     `/attendance/export/pdf?days=${days}&scope=${scope}`,
   workers: (skill?: string) => req("GET", `/workers${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`),
   wallet: () => req("GET", "/wallet"),
+  walletReferralStats: () => req("GET", "/wallet/referral-stats"),
   rate: (b: any) => req("POST", "/ratings", b),
   aiMatch: () => req("POST", "/ai/match-jobs"),
   // complaints

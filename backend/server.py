@@ -933,6 +933,25 @@ async def wallet(user=Depends(current_user)):
     fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "wallet_balance": 1, "referral_code": 1})
     return {"balance": fresh.get("wallet_balance", 0), "referral_code": fresh.get("referral_code"), "transactions": txns}
 
+
+@api.get("/wallet/referral-stats")
+async def wallet_referral_stats(user=Depends(current_user)):
+    """Return count of users invited via this user's referral code + total ₹ earned from referrals."""
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "referral_code": 1})
+    code = (fresh or {}).get("referral_code")
+    if not code:
+        return {"invited": 0, "earned": 0, "code": None}
+    invited = await db.users.count_documents({"referred_by": code})
+    # sum of positive referral credits in txn ledger
+    pipeline = [
+        {"$match": {"user_id": user["id"], "type": "referral_credit"}},
+        {"$group": {"_id": None, "sum": {"$sum": "$amount"}}},
+    ]
+    agg = await db.wallet_txns.aggregate(pipeline).to_list(length=1)
+    earned = float(agg[0]["sum"]) if agg else 0.0
+    return {"invited": invited, "earned": earned, "code": code}
+
+
 # --- Ratings ---
 @api.post("/ratings")
 async def rate(body: RatingIn, user=Depends(current_user)):
