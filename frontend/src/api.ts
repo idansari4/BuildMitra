@@ -53,6 +53,26 @@ async function req<T = any>(method: string, path: string, body?: any, opts?: { t
   }
 }
 
+export async function fetchBlob(path: string): Promise<{ blob: Blob; filename: string }> {
+  await loadToken();
+  const headers: Record<string, string> = {};
+  if (_token) headers.Authorization = `Bearer ${_token}`;
+  const res = await fetch(BASE + path, { method: "GET", headers });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j?.detail) msg = j.detail;
+    } catch {}
+    throw new Error(msg);
+  }
+  const cd = res.headers.get("content-disposition") || "";
+  const m = /filename="?([^"]+)"?/.exec(cd);
+  const filename = m ? m[1] : "download";
+  const blob = await res.blob();
+  return { blob, filename };
+}
+
 export const api = {
   register: (b: any) => req("POST", "/auth/register", b),
   login: (b: any) => req("POST", "/auth/login", b),
@@ -119,6 +139,10 @@ export const api = {
   },
   attendance: (b: any) => req("POST", "/attendance", b),
   myAttendance: () => req("GET", "/attendance/mine"),
+  exportAttendanceCsvPath: (days: number, scope: "mine" | "workers") =>
+    `/attendance/export/csv?days=${days}&scope=${scope}`,
+  exportAttendancePdfPath: (days: number, scope: "mine" | "workers") =>
+    `/attendance/export/pdf?days=${days}&scope=${scope}`,
   workers: (skill?: string) => req("GET", `/workers${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`),
   wallet: () => req("GET", "/wallet"),
   rate: (b: any) => req("POST", "/ratings", b),

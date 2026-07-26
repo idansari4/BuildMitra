@@ -15,6 +15,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
+import { downloadExport } from "@/src/utils/download";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card, PrimaryButton, SecondaryButton, Chip } from "@/src/ui";
 
@@ -40,6 +41,90 @@ type SalaryRow = {
   daily_wage: number;
   earned: number;
 };
+
+/* ---------------------------- EXPORT BAR ---------------------------- */
+
+function ExportBar({
+  scope,
+  days,
+  disabled,
+}: {
+  scope: "mine" | "workers";
+  days: number;
+  disabled?: boolean;
+}) {
+  const [busy, setBusy] = useState<"csv" | "pdf" | null>(null);
+  const [err, setErr] = useState("");
+
+  const doExport = async (fmt: "csv" | "pdf") => {
+    if (disabled || busy) return;
+    setErr("");
+    setBusy(fmt);
+    try {
+      const path =
+        fmt === "csv"
+          ? api.exportAttendanceCsvPath(days, scope)
+          : api.exportAttendancePdfPath(days, scope);
+      const fallback = `attendance_${scope}_${new Date().toISOString().slice(0, 10)}.${fmt}`;
+      await downloadExport(path, fallback);
+    } catch (e: any) {
+      setErr(e?.message || "Export failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+      <Pressable
+        testID="export-csv"
+        onPress={() => doExport("csv")}
+        disabled={disabled || !!busy}
+        style={[exportBarStyles.btn, (disabled || !!busy) && { opacity: 0.5 }]}
+      >
+        {busy === "csv" ? (
+          <ActivityIndicator size="small" color={colors.brand} />
+        ) : (
+          <Ionicons name="document-outline" size={14} color={colors.brand} />
+        )}
+        <Body style={exportBarStyles.btnText}>CSV</Body>
+      </Pressable>
+      <Pressable
+        testID="export-pdf"
+        onPress={() => doExport("pdf")}
+        disabled={disabled || !!busy}
+        style={[exportBarStyles.btn, (disabled || !!busy) && { opacity: 0.5 }]}
+      >
+        {busy === "pdf" ? (
+          <ActivityIndicator size="small" color={colors.brand} />
+        ) : (
+          <Ionicons name="download-outline" size={14} color={colors.brand} />
+        )}
+        <Body style={exportBarStyles.btnText}>PDF</Body>
+      </Pressable>
+      {err ? <Body style={{ color: colors.error, fontSize: 11, marginLeft: 4 }}>{err}</Body> : null}
+    </View>
+  );
+}
+
+const exportBarStyles = StyleSheet.create({
+  btn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    backgroundColor: colors.brandTertiary,
+  },
+  btnText: {
+    color: colors.brand,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+});
 
 /* ---------------------------- WORKER VIEW ---------------------------- */
 
@@ -364,7 +449,10 @@ function WorkerAttendance() {
       )}
 
       {/* History */}
-      <H2 style={{ marginTop: spacing.md }}>Recent</H2>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.md }}>
+        <H2>Recent</H2>
+        <ExportBar scope="mine" days={90} disabled={history.length === 0} />
+      </View>
       {history.length === 0 ? (
         <Muted>No attendance records yet.</Muted>
       ) : (
@@ -484,21 +572,24 @@ export function MonitorAttendance({ role }: { role: string }) {
       <H2 testID="attendance-title">Workforce Attendance</H2>
       <Muted>Track workers checking in on your jobs in real time.</Muted>
 
-      {/* Day filter */}
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        {[
-          { l: "Today", v: 1 },
-          { l: "7 days", v: 7 },
-          { l: "30 days", v: 30 },
-        ].map((o) => (
-          <Chip
-            key={o.v}
-            testID={`filter-${o.v}`}
-            label={o.l}
-            selected={days === o.v}
-            onPress={() => setDays(o.v)}
-          />
-        ))}
+      {/* Day filter + Export */}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          {[
+            { l: "Today", v: 1 },
+            { l: "7 days", v: 7 },
+            { l: "30 days", v: 30 },
+          ].map((o) => (
+            <Chip
+              key={o.v}
+              testID={`filter-${o.v}`}
+              label={o.l}
+              selected={days === o.v}
+              onPress={() => setDays(o.v)}
+            />
+          ))}
+        </View>
+        <ExportBar scope="workers" days={days} disabled={rows.length === 0} />
       </View>
 
       {/* Stats */}

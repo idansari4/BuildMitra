@@ -129,6 +129,18 @@ frontend:
           agent: "main"
           comment: "Rewrote attendance screen with (a) Worker view: Today's status card (check-in/out times + hours), enhanced history with job_title + geofence badge + distance, Monthly Salary Summary from /salary/summary, pull-to-refresh, better permission handling (canAskAgain + Open Settings). (b) Client/Contractor: NEW Workforce Attendance monitor with day filter (1/7/30), stats row (workers, check-ins, verified, flagged), rich per-row cards from /attendance/my-workers. (c) Admin: same monitor UI powered by /admin/attendance endpoint."
 
+  - task: "Attendance PDF & CSV Export"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/(tabs)/attendance.tsx, /app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added backend endpoints GET /api/attendance/export/csv and /api/attendance/export/pdf. Both accept days (int) and scope ('mine'|'workers'). scope='mine' for workers only (403 for others); scope='workers' for client/contractor (their jobs) and admin (all). PDF built with reportlab (landscape A4 with summary block + detail table). CSV uses stdlib csv. Frontend adds ExportBar with CSV+PDF pills in (a) Worker's Recent section header (b) Monitor view's filter row. downloadExport utility handles web (blob URL download) and native (expo-file-system + expo-sharing)."
+
 backend:
   - task: "POST /auth/register accepts role field"
     implemented: true

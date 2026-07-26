@@ -1269,6 +1269,217 @@ async def attendance_my_workers(days: int = 30, user=Depends(current_user)):
     cursor = db.attendance.find(q, {"_id": 0, "selfie": 0}).sort("created_at", -1).limit(days * 10)
     return await cursor.to_list(length=days * 10)
 
+# --- Attendance export: CSV / PDF (worker/client/contractor/admin) ---
+async def _attendance_rows_for_export(user: dict, days: int, scope: str) -> list:
+    """Fetch attendance rows respecting role scope.
+    scope: 'mine' (worker's own) or 'workers' (client/contractor's workers or admin all).
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    if scope == "mine":
+        if user["role"] != "worker":
+            raise HTTPException(403, "Workers only")
+        q = {"worker_id": user["id"], "created_at": {"$gte": cutoff}}
+    else:
+        if user["role"] not in ("client", "contractor", "admin"):
+            raise HTTPException(403, "Not allowed")
+        if user["role"] == "admin":
+            q = {"created_at": {"$gte": cutoff}}
+        else:
+            job_docs = await db.jobs.find(
+                {"posted_by": user["id"]}, {"_id": 0, "id": 1}
+            ).limit(500).to_list(length=500)
+            job_ids = [j["id"] for j in job_docs]
+            if not job_ids:
+                return []
+            q = {"job_id": {"$in": job_ids}, "created_at": {"$gte": cutoff}}
+    cursor = db.attendance.find(q, {"_id": 0, "selfie": 0}).sort("created_at", -1).limit(5000)
+    return await cursor.to_list(length=5000)
+
+
+@api.get("/attendance/export/csv")
+async def attendance_export_csv(days: int = 30, scope: str = "workers", user=Depends(current_user)):
+    """Export attendance as CSV. scope='mine' (worker) or 'workers' (client/contractor/admin)."""
+    import csv
+    from io import StringIO
+    from fastapi.responses import StreamingResponse
+
+    rows = await _attendance_rows_for_export(user, days, scope)
+
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Date", "Time", "Worker", "Type",
+        "Job Title", "Job ID", "Verified", "Distance (m)", "Latitude", "Longitude",
+    ])
+    for r in rows:
+        try:
+            dt = datetime.fromisoformat(str(r.get("created_at", "")).replace("Z", "+00:00"))
+            date_s = dt.strftime("%Y-%m-%d")
+            time_s = dt.strftime("%H:%M:%S")
+        except Exception:
+            date_s = str(r.get("created_at", ""))[:10]
+            time_s = str(r.get("created_at", ""))[11:19]
+        writer.writerow([
+            date_s, time_s,
+            r.get("worker_name", ""),
+            "Check In" if r.get("type") == "check_in" else "Check Out",
+            r.get("job_title") or "-",
+            r.get("job_id") or "-",
+            "Yes" if r.get("within_geofence", True) else "No",
+            r.get("distance_from_site_m") if r.get("distance_from_site_m") is not None else "",
+            r.get("lat", ""),
+            r.get("lng", ""),
+        ])
+    filename = f"attendance_{scope}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    buf.seek(0)
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers=headers)
+
+
+@api.get("/attendance/export/pdf")
+async def attendance_export_pdf(days: int = 30, scope: str = "workers", user=Depends(current_user)):
+    """Export attendance as PDF report."""
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+    try:
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors as rl_colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        )
+    except Exception:
+        raise HTTPException(500, "PDF library unavailable")
+
+    rows = await _attendance_rows_for_export(user, days, scope)
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=landscape(A4),
+        leftMargin=1.2 * cm, rightMargin=1.2 * cm,
+        topMargin=1.2 * cm, bottomMargin=1.2 * cm,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "TitleBM", parent=styles["Heading1"], textColor=rl_colors.HexColor("#18181B"),
+        fontSize=18, spaceAfter=4,
+    )
+    sub_style = ParagraphStyle(
+        "SubBM", parent=styles["Normal"], textColor=rl_colors.HexColor("#52525B"),
+        fontSize=10, spaceAfter=12,
+    )
+
+    story = []
+    heading = "My Attendance Report" if scope == "mine" else "Workforce Attendance Report"
+    story.append(Paragraph(f"BuildMitra — {heading}", title_style))
+    story.append(Paragraph(
+        f"Generated for: <b>{user.get('name', '')}</b> ({user.get('role', '').title()}) "
+        f"· Range: last {days} day(s) · {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        sub_style,
+    ))
+
+    # Summary block
+    total = len(rows)
+    verified = sum(1 for r in rows if r.get("within_geofence", True))
+    flagged = total - verified
+    unique_workers = len({r.get("worker_id") for r in rows if r.get("worker_id")})
+    summary_data = [
+        ["Total Entries", "Verified", "Flagged", "Unique Workers"],
+        [str(total), str(verified), str(flagged), str(unique_workers)],
+    ]
+    summary_tbl = Table(summary_data, colWidths=[4.5 * cm] * 4)
+    summary_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#FEF3C7")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.HexColor("#B45309")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 10),
+        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 1), (-1, 1), 14),
+        ("TEXTCOLOR", (0, 1), (-1, 1), rl_colors.HexColor("#18181B")),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOX", (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#E4E4E7")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, rl_colors.HexColor("#E4E4E7")),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(summary_tbl)
+    story.append(Spacer(1, 0.6 * cm))
+
+    # Detail table
+    header = [
+        "Date", "Time", "Worker", "Type", "Job", "Verified", "Distance",
+    ]
+    data = [header]
+    for r in rows:
+        try:
+            dt = datetime.fromisoformat(str(r.get("created_at", "")).replace("Z", "+00:00"))
+            date_s = dt.strftime("%d %b %Y")
+            time_s = dt.strftime("%H:%M")
+        except Exception:
+            date_s = str(r.get("created_at", ""))[:10]
+            time_s = str(r.get("created_at", ""))[11:16]
+        dist = r.get("distance_from_site_m")
+        dist_s = f"{dist} m" if dist is not None else "—"
+        job_s = (r.get("job_title") or "General")[:26]
+        worker_s = (r.get("worker_name") or "")[:22]
+        data.append([
+            date_s, time_s, worker_s,
+            "Check In" if r.get("type") == "check_in" else "Check Out",
+            job_s,
+            "✓ Yes" if r.get("within_geofence", True) else "✗ Off-site",
+            dist_s,
+        ])
+
+    if len(data) == 1:
+        story.append(Paragraph("No attendance records in this range.", styles["Italic"]))
+    else:
+        detail_tbl = Table(
+            data,
+            colWidths=[2.6 * cm, 1.8 * cm, 4.6 * cm, 2.4 * cm, 6.8 * cm, 2.5 * cm, 2.0 * cm],
+            repeatRows=1,
+        )
+        style_cmds = [
+            ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#18181B")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.HexColor("#FFFFFF")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 9),
+            ("FONTSIZE", (0, 1), (-1, -1), 8),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("GRID", (0, 0), (-1, -1), 0.25, rl_colors.HexColor("#E4E4E7")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ]
+        # Row shading + off-site red text
+        for i in range(1, len(data)):
+            if i % 2 == 0:
+                style_cmds.append(("BACKGROUND", (0, i), (-1, i), rl_colors.HexColor("#FAFAFA")))
+            if str(data[i][5]).startswith("✗"):
+                style_cmds.append(("TEXTCOLOR", (5, i), (5, i), rl_colors.HexColor("#DC2626")))
+                style_cmds.append(("FONTNAME", (5, i), (5, i), "Helvetica-Bold"))
+            else:
+                style_cmds.append(("TEXTCOLOR", (5, i), (5, i), rl_colors.HexColor("#16A34A")))
+        detail_tbl.setStyle(TableStyle(style_cmds))
+        story.append(detail_tbl)
+
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(Paragraph(
+        "This is an auto-generated report from BuildMitra. All check-ins are GPS + Selfie verified.",
+        ParagraphStyle("footer", parent=styles["Normal"], fontSize=8,
+                       textColor=rl_colors.HexColor("#71717A"), alignment=1),
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    filename = f"attendance_{scope}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(buf, media_type="application/pdf", headers=headers)
+
 # --- Wallet withdrawal (worker cashes out earnings via mock UPI) ---
 class WithdrawIn(BaseModel):
     amount: float
