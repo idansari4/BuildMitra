@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
+import { downloadExport } from "@/src/utils/download";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card, PrimaryButton, SecondaryButton, Field, Chip } from "@/src/ui";
 import { PaymentSheet } from "@/src/payment-sheet";
@@ -50,6 +51,90 @@ function txnMeta(type: string, isCredit: boolean) {
   if (t.includes("erp")) return { icon: "briefcase" as const, color: "#3B82F6" };
   return { icon: isCredit ? "add-circle" as const : "remove-circle" as const, color: isCredit ? colors.success : colors.error };
 }
+
+/** Get a friendly status pill + description for a transaction */
+function txnStatusInfo(tx: Txn): { text: string; color: string; bg: string; description?: string } | null {
+  const type = (tx.type || "").toLowerCase();
+  const status = (tx.status || "success").toLowerCase();
+  if (type.includes("withdraw")) {
+    if (status === "processing" || status === "pending") {
+      return { text: "Processing", color: "#B45309", bg: "#FEF3C7", description: "Bank transfer usually completes in 24 hours." };
+    }
+    if (status === "success" || status === "paid" || status === "completed") {
+      return { text: "Paid", color: "#16A34A", bg: "#DCFCE7", description: tx.upi_id ? `Sent to ${tx.upi_id}` : undefined };
+    }
+    if (status === "failed") {
+      return { text: "Failed", color: "#DC2626", bg: "#FEE2E2", description: "Amount refunded to your wallet." };
+    }
+  }
+  if (status !== "success" && status !== "completed") {
+    return { text: status.charAt(0).toUpperCase() + status.slice(1), color: colors.warning, bg: "#FEF3C7" };
+  }
+  return null;
+}
+
+/* --------------------- Wallet Export Bar --------------------- */
+function WalletExportBar({ disabled }: { disabled?: boolean }) {
+  const [busy, setBusy] = useState<"csv" | "pdf" | null>(null);
+
+  const doExport = async (fmt: "csv" | "pdf") => {
+    if (disabled || busy) return;
+    setBusy(fmt);
+    try {
+      const path = fmt === "csv"
+        ? api.exportWalletCsvPath(6)
+        : api.exportWalletPdfPath(6);
+      const fallback = `wallet_statement_${new Date().toISOString().slice(0, 10)}.${fmt}`;
+      await downloadExport(path, fallback);
+    } catch {
+      // Swallow - shown briefly via alert may be too intrusive; user can retry
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <View style={{ flexDirection: "row", gap: 6 }}>
+      <Pressable
+        testID="wallet-export-csv"
+        onPress={() => doExport("csv")}
+        disabled={disabled || !!busy}
+        style={[walletExportStyles.btn, (disabled || !!busy) && { opacity: 0.5 }]}
+      >
+        <Ionicons name="document-outline" size={13} color={colors.brand} />
+        <Body style={walletExportStyles.txt}>{busy === "csv" ? "…" : "CSV"}</Body>
+      </Pressable>
+      <Pressable
+        testID="wallet-export-pdf"
+        onPress={() => doExport("pdf")}
+        disabled={disabled || !!busy}
+        style={[walletExportStyles.btn, (disabled || !!busy) && { opacity: 0.5 }]}
+      >
+        <Ionicons name="download-outline" size={13} color={colors.brand} />
+        <Body style={walletExportStyles.txt}>{busy === "pdf" ? "…" : "PDF"}</Body>
+      </Pressable>
+    </View>
+  );
+}
+
+const walletExportStyles = StyleSheet.create({
+  btn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    backgroundColor: colors.brandTertiary,
+  },
+  txt: {
+    color: colors.brand,
+    fontWeight: "800",
+    fontSize: 11,
+  },
+});
 
 export default function Wallet() {
   const [data, setData] = useState<{ balance: number; referral_code: string; transactions: Txn[] }>({
@@ -279,8 +364,9 @@ export default function Wallet() {
         {/* Transactions with filter */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.md }}>
           <H2>Transactions</H2>
-          <Muted style={{ fontSize: 12 }}>{stats.count} entries</Muted>
+          <WalletExportBar disabled={data.transactions.length === 0} />
         </View>
+        <Muted style={{ fontSize: 12, marginTop: -2 }}>{stats.count} entries</Muted>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <Chip testID="filter-all" label="All" selected={filter === "all"} onPress={() => setFilter("all")} />
           <Chip testID="filter-in" label="Money In" selected={filter === "in"} onPress={() => setFilter("in")} />
@@ -292,6 +378,7 @@ export default function Wallet() {
             const amt = Number(tx.amount) || 0;
             const isCredit = amt >= 0;
             const meta = txnMeta(tx.type, isCredit);
+            const statusInfo = txnStatusInfo(tx);
             return (
               <Card key={tx.id} testID={`txn-${tx.id}`}>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -302,18 +389,25 @@ export default function Wallet() {
                     <Body style={{ fontWeight: "700" }} numberOfLines={2}>
                       {tx.note || tx.type}
                     </Body>
-                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3, gap: 6 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3, gap: 6, flexWrap: "wrap" }}>
                       <Muted style={{ fontSize: 11 }}>
                         {new Date(tx.created_at).toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })}
                         {" · "}
                         {new Date(tx.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </Muted>
-                      {tx.status && tx.status !== "success" ? (
-                        <View style={styles.statusPill}>
-                          <Body style={{ fontSize: 10, color: colors.warning, fontWeight: "700" }}>{tx.status}</Body>
+                      {statusInfo ? (
+                        <View style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}>
+                          <Body style={{ fontSize: 10, color: statusInfo.color, fontWeight: "800" }}>
+                            {statusInfo.text}
+                          </Body>
                         </View>
                       ) : null}
                     </View>
+                    {statusInfo?.description ? (
+                      <Muted style={{ fontSize: 11, marginTop: 3, fontStyle: "italic" }}>
+                        {statusInfo.description}
+                      </Muted>
+                    ) : null}
                   </View>
                   <Body
                     style={{
@@ -664,7 +758,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: "#FEF3C7",
   },
   modalBackdrop: {
     flex: 1,

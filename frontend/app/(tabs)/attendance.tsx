@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
@@ -129,6 +130,7 @@ const exportBarStyles = StyleSheet.create({
 /* ---------------------------- WORKER VIEW ---------------------------- */
 
 function WorkerAttendance() {
+  const router = useRouter();
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [selfie, setSelfie] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -268,6 +270,24 @@ function WorkerAttendance() {
     >
       <H2 testID="attendance-title">Attendance</H2>
       <Muted>GPS + Selfie verification keeps every check-in secure.</Muted>
+
+      {/* Leave quick link */}
+      <Pressable
+        testID="request-leave-link"
+        onPress={() => router.push("/leave")}
+        style={styles.leaveLink}
+      >
+        <View style={styles.leaveLinkIcon}>
+          <Ionicons name="calendar" size={20} color={colors.brand} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Body style={{ fontWeight: "800" }}>Leave Requests</Body>
+          <Muted style={{ fontSize: 12, marginTop: 2 }}>
+            Apply for leave · Track approval status
+          </Muted>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+      </Pressable>
 
       {/* Today's status */}
       <Card testID="today-status">
@@ -520,6 +540,7 @@ function WorkerAttendance() {
 /* ---------------------- CLIENT/CONTRACTOR/ADMIN VIEW ---------------------- */
 
 export function MonitorAttendance({ role }: { role: string }) {
+  const router = useRouter();
   const [days, setDays] = useState(1);
   const [rows, setRows] = useState<AttRec[]>([]);
   const [loading, setLoading] = useState(true);
@@ -571,6 +592,24 @@ export function MonitorAttendance({ role }: { role: string }) {
     >
       <H2 testID="attendance-title">Workforce Attendance</H2>
       <Muted>Track workers checking in on your jobs in real time.</Muted>
+
+      {/* Leave inbox link for approvers */}
+      <Pressable
+        testID="leave-inbox-link"
+        onPress={() => router.push("/leave")}
+        style={styles.leaveLink}
+      >
+        <View style={styles.leaveLinkIcon}>
+          <Ionicons name="mail-unread" size={20} color={colors.brand} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Body style={{ fontWeight: "800" }}>Leave Inbox</Body>
+          <Muted style={{ fontSize: 12, marginTop: 2 }}>
+            Approve or reject worker leave requests
+          </Muted>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+      </Pressable>
 
       {/* Day filter + Export */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -763,5 +802,23 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
     alignItems: "center",
+  },
+  leaveLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  leaveLinkIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandTertiary,
   },
 });

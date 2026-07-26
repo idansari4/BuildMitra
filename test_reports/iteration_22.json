@@ -1,0 +1,35 @@
+{
+  "summary": "Iter 22 additions fully verified. Backend: 12/12 pytest cases pass (wallet CSV export headers/body/summary rows, PDF magic bytes+content-disposition, /wallet/withdrawals type+sign, 401 unauth, regression on /wallet + /wallet/referral-stats). Frontend (mobile 390x844): (A) Worker attendance shows request-leave-link card 'Leave Requests', taps to /leave, prior testIDs (today-status, job-self, checkin-button) intact. (B) Worker wallet: wallet-export-csv & wallet-export-pdf visible pills next to Transactions heading; CSV download filename correct, first line == expected header; PDF download filename ends .pdf and content starts b'%PDF-'; withdrawal row shows amber 'Processing' pill with italic description 'Bank transfer usually completes in 24 hours.' both before and after issuing a fresh ₹5 withdrawal to test@upi. (C) Client, (D) Contractor, (E) Admin (via /admin/attendance) all show leave-inbox-link card 'Leave Inbox', tap navigates to /leave and 'Inbox' chip is selected/visible. No blocking issues found. No deprecated Expo packages introduced by this iteration.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_wallet_iter22.py",
+    "/app/test_reports/pytest/iter22_wallet.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "wallet.tsx WalletExportBar swallows download errors silently (catch {}); consider surfacing a toast when export fails so users know to retry.",
+    "wallet_export_csv writes header line then iterates rows before writing an empty separator + TOTAL CREDIT/DEBIT/NET rows; if a user's txn 'note' field contains commas/quotes it will still be quoted by csv.writer (fine), but consider trimming or escaping upi_id column for safety.",
+    "server.py continues to grow (>2800 lines) — file-size threshold repeatedly flagged; iter 22 added ~200 more lines. Suggest splitting wallet + export routers into wallet_router.py."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_wallet_iter22.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "seed_data_creation": "During frontend test a real ₹5 withdrawal to test@upi was submitted for worker 9000000002 (used to force a fresh 'processing' status row); also topped up ₹100 during backend pytest to guarantee non-zero balance for withdrawal. No other seed data created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 22 (wallet CSV/PDF export, /wallet/withdrawals endpoint, attendance→leave discoverability cards) is fully verified backend+frontend. If retest needed, run `pytest /app/backend/tests/test_wallet_iter22.py -v`. Frontend flows use testIDs: request-leave-link, leave-inbox-link, wallet-export-csv, wallet-export-pdf, action-withdraw, withdraw-amount/upi/submit. Admin uses /admin/attendance (not /attendance) — that route hosts leave-inbox-link. Worker route /attendance hosts request-leave-link. Withdrawal status pill/description logic is in wallet.tsx `txnStatusInfo`.",
+  "rca_of_issue": "N/A — no failing tests."
+}

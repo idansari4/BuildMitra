@@ -153,6 +153,30 @@ frontend:
           agent: "main"
           comment: "BUG FIX + Completion. Prior wallet had PaymentSheet imported but NEVER RENDERED — top-up buttons did nothing. Rewrote wallet screen with (a) PaymentSheet correctly wired to quick topup buttons. (b) NEW Custom Top-up bottom sheet (₹10 – ₹1,00,000 with preset chips + 5 presets). (c) NEW Withdraw modal with amount + UPI ID (regex validated) + 25/50/100% presets + success confirmation screen (calls /wallet/withdraw). (d) Money-flow mini stats (credited/debited totals) on hero card. (e) Referral stats row on hero card (Invited count + Earned ₹) via NEW backend GET /api/wallet/referral-stats. (f) Tap-to-copy referral code (web). (g) Filter chips (All/Money In/Money Out) for transactions. (h) Type-based transaction icons (referral=gift purple, salary=cash green, withdraw=up-red, topup=down-green, erp=briefcase-blue). (i) Pull-to-refresh. (j) Improved empty state."
 
+  - task: "Wallet CSV + PDF export & enhanced withdrawal status display"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/(tabs)/wallet.tsx, /app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Iter 22: Added backend GET /api/wallet/export/csv?months=N and /api/wallet/export/pdf?months=N with proper role auth (any authenticated user gets their own txns). PDF has header/user info/summary block (balance, credited, debited, net) + detail table with row-shading and green/red amount colouring. CSV includes running totals footer. NEW backend GET /api/wallet/withdrawals returns dedicated withdrawal list. Frontend: WalletExportBar with CSV+PDF pills next to Transactions header. Enhanced withdrawal transaction display: 'Processing' pill (amber) + description 'Bank transfer usually completes in 24 hours.'; 'Paid' pill (green) + 'Sent to <upi>' when successful; 'Failed' pill (red) + 'Amount refunded'."
+
+  - task: "Attendance: Leave request/inbox discoverability"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/(tabs)/attendance.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added a Leave link card at the top of the Attendance screen. For worker: 'Leave Requests — Apply for leave · Track approval status' (testID request-leave-link). For client/contractor/admin (Monitor view): 'Leave Inbox — Approve or reject worker leave requests' (testID leave-inbox-link). Both navigate to /leave route (which is a fully-working screen from prior iterations)."
+
 backend:
   - task: "POST /auth/register accepts role field"
     implemented: true

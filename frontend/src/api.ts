@@ -146,6 +146,9 @@ export const api = {
   workers: (skill?: string) => req("GET", `/workers${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`),
   wallet: () => req("GET", "/wallet"),
   walletReferralStats: () => req("GET", "/wallet/referral-stats"),
+  walletWithdrawals: () => req("GET", "/wallet/withdrawals"),
+  exportWalletCsvPath: (months: number) => `/wallet/export/csv?months=${months}`,
+  exportWalletPdfPath: (months: number) => `/wallet/export/pdf?months=${months}`,
   rate: (b: any) => req("POST", "/ratings", b),
   aiMatch: () => req("POST", "/ai/match-jobs"),
   // complaints

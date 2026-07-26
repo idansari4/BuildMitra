@@ -952,6 +952,223 @@ async def wallet_referral_stats(user=Depends(current_user)):
     return {"invited": invited, "earned": earned, "code": code}
 
 
+# --- Wallet CSV / PDF export ---
+def _txn_type_label(t: str) -> str:
+    m = {
+        "wallet_topup": "Wallet Top-up",
+        "topup": "Wallet Top-up",
+        "withdrawal": "UPI Withdrawal",
+        "referral_credit": "Referral Bonus",
+        "salary": "Salary / Earnings",
+        "wage": "Wage Payout",
+        "erp_pro_topup": "ERP Pro Subscription",
+        "escrow_release": "Job Payment Released",
+        "escrow_hold": "Payment Held (Escrow)",
+    }
+    return m.get(t or "", (t or "").replace("_", " ").title() or "Transaction")
+
+
+async def _wallet_txns_for_export(user: dict, months: int) -> list:
+    from dateutil.relativedelta import relativedelta  # type: ignore
+    try:
+        cutoff = (datetime.now(timezone.utc) - relativedelta(months=months)).isoformat()
+    except Exception:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=months * 30)).isoformat()
+    cursor = db.wallet_txns.find(
+        {"user_id": user["id"], "created_at": {"$gte": cutoff}},
+        {"_id": 0},
+    ).sort("created_at", -1).limit(5000)
+    return await cursor.to_list(length=5000)
+
+
+@api.get("/wallet/export/csv")
+async def wallet_export_csv(months: int = 6, user=Depends(current_user)):
+    import csv
+    from io import StringIO
+    from fastapi.responses import StreamingResponse
+
+    rows = await _wallet_txns_for_export(user, months)
+    buf = StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Date", "Time", "Type", "Description", "Amount (₹)", "Balance Effect", "Status", "Reference"])
+    running_credit = 0.0
+    running_debit = 0.0
+    for r in rows:
+        try:
+            dt = datetime.fromisoformat(str(r.get("created_at", "")).replace("Z", "+00:00"))
+            date_s = dt.strftime("%Y-%m-%d")
+            time_s = dt.strftime("%H:%M:%S")
+        except Exception:
+            date_s = str(r.get("created_at", ""))[:10]
+            time_s = str(r.get("created_at", ""))[11:19]
+        amt = float(r.get("amount") or 0)
+        if amt >= 0:
+            running_credit += amt
+        else:
+            running_debit += abs(amt)
+        ref = r.get("upi_id") or r.get("order_id") or r.get("job_id") or ""
+        w.writerow([
+            date_s, time_s,
+            _txn_type_label(r.get("type", "")),
+            r.get("note", "") or "",
+            f"{amt:+.2f}",
+            "Credit" if amt >= 0 else "Debit",
+            r.get("status", "success"),
+            ref,
+        ])
+    # Summary row
+    w.writerow([])
+    w.writerow(["", "", "", "TOTAL CREDIT", f"{running_credit:+.2f}", "", "", ""])
+    w.writerow(["", "", "", "TOTAL DEBIT",  f"-{running_debit:.2f}", "", "", ""])
+    w.writerow(["", "", "", "NET",           f"{(running_credit - running_debit):+.2f}", "", "", ""])
+
+    filename = f"wallet_{user.get('id','')}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    buf.seek(0)
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers=headers)
+
+
+@api.get("/wallet/export/pdf")
+async def wallet_export_pdf(months: int = 6, user=Depends(current_user)):
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors as rl_colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        )
+    except Exception:
+        raise HTTPException(500, "PDF library unavailable")
+
+    rows = await _wallet_txns_for_export(user, months)
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "wallet_balance": 1, "referral_code": 1, "name": 1, "mobile": 1})
+    balance = float((fresh or {}).get("wallet_balance", 0) or 0)
+    ref_code = (fresh or {}).get("referral_code") or "—"
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=1.4 * cm, rightMargin=1.4 * cm,
+        topMargin=1.4 * cm, bottomMargin=1.4 * cm,
+    )
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("Title", parent=styles["Heading1"], textColor=rl_colors.HexColor("#18181B"), fontSize=18, spaceAfter=2)
+    sub = ParagraphStyle("Sub", parent=styles["Normal"], textColor=rl_colors.HexColor("#52525B"), fontSize=9, spaceAfter=8)
+    section = ParagraphStyle("Sec", parent=styles["Heading2"], fontSize=13, textColor=rl_colors.HexColor("#B45309"), spaceBefore=4, spaceAfter=4)
+
+    story = [
+        Paragraph("BuildMitra — Wallet Statement", title),
+        Paragraph(
+            f"<b>{fresh.get('name','')}</b> · {fresh.get('mobile','')} · Referral: {ref_code}"
+            f"<br/>Period: last {months} months · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            sub,
+        ),
+    ]
+
+    # Summary
+    total_credit = sum(float(r.get("amount") or 0) for r in rows if float(r.get("amount") or 0) >= 0)
+    total_debit = sum(abs(float(r.get("amount") or 0)) for r in rows if float(r.get("amount") or 0) < 0)
+    sum_data = [
+        ["Current Balance", "Credited", "Debited", "Net"],
+        [f"₹{balance:,.2f}", f"+₹{total_credit:,.2f}", f"-₹{total_debit:,.2f}", f"₹{(total_credit - total_debit):+,.2f}"],
+    ]
+    sum_tbl = Table(sum_data, colWidths=[4.4 * cm] * 4)
+    sum_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#FEF3C7")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.HexColor("#B45309")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 1), (-1, 1), 12),
+        ("TEXTCOLOR", (1, 1), (1, 1), rl_colors.HexColor("#16A34A")),
+        ("TEXTCOLOR", (2, 1), (2, 1), rl_colors.HexColor("#DC2626")),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("BOX", (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#E4E4E7")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, rl_colors.HexColor("#E4E4E7")),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(sum_tbl)
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(Paragraph("Transactions", section))
+
+    header = ["Date", "Type", "Description", "Status", "Amount (₹)"]
+    data = [header]
+    for r in rows:
+        try:
+            dt = datetime.fromisoformat(str(r.get("created_at", "")).replace("Z", "+00:00"))
+            date_s = dt.strftime("%d %b %Y\n%H:%M")
+        except Exception:
+            date_s = str(r.get("created_at", ""))[:10]
+        amt = float(r.get("amount") or 0)
+        desc = (r.get("note", "") or "")[:44]
+        data.append([
+            date_s,
+            _txn_type_label(r.get("type", "")),
+            desc,
+            (r.get("status", "success") or "success").title(),
+            f"{'+' if amt >= 0 else '−'}₹{abs(amt):,.2f}",
+        ])
+
+    if len(data) == 1:
+        story.append(Paragraph("No transactions in this period.", styles["Italic"]))
+    else:
+        tbl = Table(data, colWidths=[2.4 * cm, 3.6 * cm, 6.4 * cm, 2.4 * cm, 2.8 * cm], repeatRows=1)
+        style = [
+            ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#18181B")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.HexColor("#FFFFFF")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 9),
+            ("FONTSIZE", (0, 1), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("GRID", (0, 0), (-1, -1), 0.25, rl_colors.HexColor("#E4E4E7")),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("ALIGN", (-1, 1), (-1, -1), "RIGHT"),
+        ]
+        for i in range(1, len(data)):
+            if i % 2 == 0:
+                style.append(("BACKGROUND", (0, i), (-1, i), rl_colors.HexColor("#FAFAFA")))
+            amt_cell = data[i][-1]
+            if amt_cell.startswith("+"):
+                style.append(("TEXTCOLOR", (-1, i), (-1, i), rl_colors.HexColor("#16A34A")))
+                style.append(("FONTNAME", (-1, i), (-1, i), "Helvetica-Bold"))
+            elif amt_cell.startswith("−"):
+                style.append(("TEXTCOLOR", (-1, i), (-1, i), rl_colors.HexColor("#DC2626")))
+                style.append(("FONTNAME", (-1, i), (-1, i), "Helvetica-Bold"))
+        tbl.setStyle(TableStyle(style))
+        story.append(tbl)
+
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(Paragraph(
+        "Auto-generated by BuildMitra Wallet — an official record of your account activity.",
+        ParagraphStyle("footer", parent=styles["Normal"], fontSize=8, textColor=rl_colors.HexColor("#71717A"), alignment=1),
+    ))
+    doc.build(story)
+    buf.seek(0)
+    filename = f"wallet_statement_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(buf, media_type="application/pdf", headers=headers)
+
+
+# --- Withdrawal history endpoint (dedicated) ---
+@api.get("/wallet/withdrawals")
+async def wallet_withdrawals(user=Depends(current_user)):
+    """Return list of withdrawal-only transactions for this user."""
+    cursor = db.wallet_txns.find(
+        {"user_id": user["id"], "type": "withdrawal"},
+        {"_id": 0},
+    ).sort("created_at", -1).limit(200)
+    items = await cursor.to_list(length=200)
+    return items
+
+
+
 # --- Ratings ---
 @api.post("/ratings")
 async def rate(body: RatingIn, user=Depends(current_user)):
