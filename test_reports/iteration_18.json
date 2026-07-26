@@ -1,0 +1,52 @@
+{
+  "summary": "Attendance module (iter 18) tested end-to-end. Backend: 12/12 pytest passed (worker /attendance/mine + /salary/summary shape, role guards 403 for salary→client/admin & my-workers/admin-attendance→worker, client/contractor /attendance/my-workers with days=1/7/30, admin /admin/attendance). Frontend rendering (via direct URL): WORKER shows all required testIDs (today-status, job-self, gps-button, selfie-button, checkin-button, checkout-button) + '1. Location', '2. Selfie', 'Recent', 'Monthly Summary' sections; CLIENT view shows 'Workforce Attendance' with filter-1/7/30 chips, 4 stat cards (Workers/Check-ins/Verified/Flagged=1/20/20/0), 20 verified entries; filter-7 tap works; CONTRACTOR gets identical monitor UI. THREE ISSUES FOUND: (1) HIGH — the Attendance tab is HIDDEN from the tab bar for CLIENT/CONTRACTOR (`(tabs)/_layout.tsx:53` sets href to null for non-workers). Live tab bars for these roles show Home/My Jobs/Post Job/ERP/Wallet/Profile with NO Attendance entry, so the new MonitorAttendance UI is unreachable in normal navigation — my tests only worked because I called page.goto() directly. (2) HIGH — ADMIN is redirected off /(tabs)/attendance to /admin/dashboard and no admin/attendance.tsx exists, so admin cannot reach the monitor at all. (3) MEDIUM — `<H2 testID='attendance-title'>` never emits `data-testid` in the DOM because `src/ui.tsx` H2/H1/Muted don't accept a testID prop; visible title text is correct but the selector spec'd in the review isn't queryable. No React Native red-screen errors; only benign 'shadow* deprecated' style warnings.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "H2 in src/ui.tsx",
+        "issue": "H2 component signature `({children, style})` drops the `testID` prop passed at `attendance.tsx:184` and `:484`, so `[data-testid=\"attendance-title\"]` selector cannot find the title. Fix: add `testID?: string` to H2 (and H1/Body/Muted for consistency) and forward it to <Text testID={testID}>. Reference: /app/frontend/src/ui.tsx:105",
+        "testID": "attendance-title",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "Attendance tab hidden for non-workers",
+        "issue": "The new MonitorAttendance UI for CLIENT/CONTRACTOR/ADMIN is unreachable from the tab bar. /app/frontend/app/(tabs)/_layout.tsx:53 sets `href: isWorker ? '/(tabs)/attendance' : null` which hides the tab for client/contractor. Line 14 unconditionally redirects admin to /admin/dashboard. Verified live: CLIENT and CONTRACTOR tab bars show Home/My Jobs/Post Job/ERP/Wallet/Profile with no Attendance entry; ADMIN has no attendance page under /admin/*. The screen only rendered in my test because I called page.goto() directly. Fix: (a) change `href: isWorker ? '/(tabs)/attendance' : null` to `undefined` so the tab shows for client/contractor too, or add a Monitor tab entry, and (b) add /app/frontend/app/admin/attendance.tsx that renders MonitorAttendance with role='admin' plus a link from the admin dashboard/monitor screen. Reference: /app/frontend/app/(tabs)/_layout.tsx:14,53",
+        "testID": "n/a",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_attendance_iter18.py",
+    "/app/test_reports/pytest/iter18_attendance.xml"
+  ],
+  "action_items": [
+    "Add testID support to H2/H1/Body/Muted in /app/frontend/src/ui.tsx (forward testID prop to inner <Text>) so `data-testid=\"attendance-title\"` becomes queryable.",
+    "Make the Workforce Attendance monitor reachable from the tab bar for CLIENT and CONTRACTOR — in /app/frontend/app/(tabs)/_layout.tsx:53 remove the `isWorker ? … : null` guard (or add a role-specific label) so the tab renders for client/contractor. Currently the screen only opens via direct URL.",
+    "Expose the monitor to ADMIN — add /app/frontend/app/admin/attendance.tsx (renders MonitorAttendance with role='admin') and link it from admin/dashboard.tsx or admin/monitor.tsx; today /(tabs)/_layout.tsx:14 redirects admin away and no admin-side attendance route exists."
+  ],
+  "critical_code_review_comments": [
+    "attendance.tsx (677 lines) is close to the 700-line soft-cap; ok for now.",
+    "MonitorAttendance component client-side-filters /admin/attendance by cutoff based on `days` (attendance.tsx:446-449) — this is fine but if the admin dataset grows large, prefer moving the filter to the backend query.",
+    "WorkerAttendance.load has `selectedJobId` in the useCallback deps but the effect intentionally ignores it via eslint-disable (attendance.tsx:78). Works today; consider splitting into two effects to avoid future confusion."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_attendance_iter18.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12)",
+    "frontend": "80% (worker/client/contractor flows fully verified; admin monitor unreachable from UI; attendance-title testID missing in DOM but text visually correct)"
+  },
+  "seed_data_creation": "None. Used auto-seeded demo accounts.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Attendance testIDs on WorkerAttendance are ALL queryable (today-status, job-self, job-<id>, gps-button, selfie-button, retake-selfie, open-settings, checkin-button, checkout-button). On MonitorAttendance filter-1/7/30 chips are queryable. The only failing selector is `attendance-title` because the H2 wrapper in src/ui.tsx drops testID — verify with `page.inner_text('body')` containing 'Attendance' vs 'Workforce Attendance' as a workaround. Backend suite lives at /app/backend/tests/test_attendance_iter18.py; rerun with `pytest backend/tests/test_attendance_iter18.py -v`. Client 9000000001 currently has 20 verified check-ins for TEST_Phase2 Mason work and TEST_Job_* jobs (from prior iterations) so monitor stats will show non-zero — do not treat that as a bug.",
+  "rca_of_issue": "Both frontend gaps are structural: (a) `H2` in src/ui.tsx never had testID support so passing `testID` on `<H2>` is a no-op even though the code looks correct; (b) the (tabs) layout was written with worker-first assumption (`isWorker ? attendance : null` for tab visibility) plus an admin→/admin/dashboard redirect, so introducing an admin/client/contractor branch inside attendance.tsx isn't sufficient — a corresponding routing surface (admin/attendance.tsx or a link inside admin/monitor.tsx) is needed for admin. Client and contractor still work because the tab layout only hides the tab bar entry (`href: null`) but leaves the underlying route reachable, and their home screen or admin_activity link may route them there; verify main tab bar for CLIENT/CONTRACTOR includes 'Attendance' entry."
+}

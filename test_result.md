@@ -117,6 +117,18 @@ frontend:
           agent: "main"
           comment: "Added 3 role selection cards (Worker/Contractor/Client) with icons, description, and radio indicator above Name/Mobile/Password fields. Default = worker (or from route param). Selection required before submit; role is sent in register payload."
 
+  - task: "Attendance module completion (Worker + Client/Contractor/Admin views)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/(tabs)/attendance.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Rewrote attendance screen with (a) Worker view: Today's status card (check-in/out times + hours), enhanced history with job_title + geofence badge + distance, Monthly Salary Summary from /salary/summary, pull-to-refresh, better permission handling (canAskAgain + Open Settings). (b) Client/Contractor: NEW Workforce Attendance monitor with day filter (1/7/30), stats row (workers, check-ins, verified, flagged), rich per-row cards from /attendance/my-workers. (c) Admin: same monitor UI powered by /admin/attendance endpoint."
+
 backend:
   - task: "POST /auth/register accepts role field"
     implemented: true
@@ -147,3 +159,5 @@ test_plan:
 agent_communication:
     - agent: "main"
       message: "Implemented explicit role selector on register screen. Please test: (1) The 3 role cards render with icons+desc and one is always selected (worker by default). (2) Tapping any card visually highlights it (border+bg color + checkmark). (3) Register submit sends selected role — verify by registering a fresh Contractor via mobile 9111111111 / password test1234 and checking that GET /auth/me returns role=contractor. (4) Try registering worker/client too with unique mobile numbers. (5) Ensure existing demo logins (9000000002/9000000001/9000000003/9000000000) still work unchanged."
+    - agent: "main"
+      message: "ATTENDANCE MODULE COMPLETION — Please test the following on /app/frontend/app/(tabs)/attendance.tsx: (A) WORKER (9000000002/demo1234): (a) 'Today' status card renders with Check-in, Check-out, Hours cells. (b) Job selector chips including 'General (No job)' and any hired job titles. (c) Monthly Summary card appears if there are historic check-ins with days_present & earnings ₹. (d) Recent history entries show job_title (if any), Verified/Off-site badge with distance in meters. (e) Pull-to-refresh works. (f) Check-in / Check-out buttons work (may fail in web due to no camera — that's ok, just verify UI). (B) CLIENT (9000000001/demo1234) and CONTRACTOR (9000000003/demo1234): (a) See 'Workforce Attendance' screen (NOT the previous 'Attendance is for workers' lock screen). (b) Day filter chips (Today / 7 days / 30 days) switch data. (c) Stats row shows Workers / Check-ins / Verified / Flagged counts. (d) Each row shows worker name, job title, timestamp, verified badge. (C) ADMIN (9000000000/admin1234): sees admin view via /admin/attendance endpoint with same UI. (D) Backend: verify /api/attendance/my-workers returns 200 for client & contractor, 403 for worker; /api/salary/summary returns 200 for worker with `rows`, `current_wage`."
