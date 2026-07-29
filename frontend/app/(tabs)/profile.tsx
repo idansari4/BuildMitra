@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Image, Alert, ActionSheetIOS, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -66,17 +66,61 @@ export default function Profile() {
     } finally { setAadhaarBusy(false); }
   };
 
-  const toggleSkill = (s: string) => setSkills((cur) => cur.includes(s) ? cur.filter(x => x !== s) : [...cur, s]);
+  const [availStatus, setAvailStatus] = useState<{
+    can_enable: boolean;
+    profile_complete: boolean;
+    missing_fields: string[];
+    is_currently_hired: boolean;
+    reasons: string[];
+    active_jobs_count?: number;
+  } | null>(null);
+
+  const fetchAvailStatus = useCallback(async () => {
+    if (!isWorker) return;
+    try {
+      const s = await api.availabilityStatus();
+      setAvailStatus(s);
+      // Sync local toggle with actual backend-enforced value
+      if (typeof s?.current_available === "boolean") {
+        setAvailable(s.current_available);
+      }
+    } catch {}
+  }, [isWorker]);
+
+  useEffect(() => {
+    fetchAvailStatus();
+  }, [fetchAvailStatus]);
+
+  // Single-select for Job title (worker)
+  const toggleSkill = (s: string) =>
+    setSkills((cur) => (cur[0] === s ? [] : [s]));
 
   const toggleAvailability = async (val: boolean) => {
+    // If turning ON, respect rules — block with clear message
+    if (val && availStatus && !availStatus.can_enable) {
+      const msg =
+        availStatus.reasons?.join("\n\n") ||
+        "You cannot turn availability on right now.";
+      if (Platform.OS === "web") {
+        // Web: alert()
+        if (typeof window !== "undefined" && (window as any).alert) {
+          (window as any).alert(msg);
+        }
+      } else {
+        Alert.alert("Availability locked", msg);
+      }
+      return;
+    }
+    const prev = available;
     setAvailable(val);
     try {
       await api.updateMe({ available: val });
       await refresh();
-    } catch {
+      await fetchAvailStatus();
+    } catch (e: any) {
       // revert on error
-      setAvailable(!val);
-      setMsg(tr("common.failed"));
+      setAvailable(prev);
+      setMsg(e?.message || tr("common.failed"));
     }
   };
 
@@ -93,6 +137,7 @@ export default function Profile() {
         company_name: company,
       });
       await refresh();
+      await fetchAvailStatus();
       setMsg(tr("common.saved"));
     } catch (e: any) { setMsg(e?.message || tr("common.failed")); }
     finally { setBusy(false); }
@@ -228,20 +273,42 @@ export default function Profile() {
                 <View
                   style={[
                     styles.availIcon,
-                    { backgroundColor: available ? "#DCFCE7" : "#FEE2E2" },
+                    {
+                      backgroundColor: available
+                        ? "#DCFCE7"
+                        : availStatus && !availStatus.can_enable
+                        ? "#FEE2E2"
+                        : colors.surfaceSecondary,
+                    },
                   ]}
                 >
                   <Ionicons
-                    name={available ? "checkmark-circle" : "close-circle"}
+                    name={
+                      available
+                        ? "checkmark-circle"
+                        : availStatus && !availStatus.can_enable
+                        ? "lock-closed"
+                        : "power"
+                    }
                     size={22}
-                    color={available ? colors.success : colors.error}
+                    color={
+                      available
+                        ? colors.success
+                        : availStatus && !availStatus.can_enable
+                        ? colors.error
+                        : colors.onSurfaceSecondary
+                    }
                   />
                 </View>
                 <View style={{ flex: 1, marginHorizontal: 12 }}>
                   <Body style={{ fontWeight: "800" }}>Availability</Body>
-                  <Muted style={{ fontSize: 12, marginTop: 2 }}>
+                  <Muted style={{ fontSize: 12, marginTop: 2 }} numberOfLines={3}>
                     {available
                       ? "You are visible to clients for new work"
+                      : availStatus?.is_currently_hired
+                      ? "Currently hired on a job — availability locked OFF"
+                      : availStatus && !availStatus.profile_complete
+                      ? "Complete your profile to enable availability"
                       : "You will not receive new job offers"}
                   </Muted>
                 </View>
@@ -249,24 +316,65 @@ export default function Profile() {
                   testID="availability-toggle"
                   value={available}
                   onValueChange={toggleAvailability}
+                  disabled={!available && !!availStatus && !availStatus.can_enable}
                   trackColor={{ false: colors.border, true: colors.brand }}
                   thumbColor={colors.surface}
                   ios_backgroundColor={colors.border}
                 />
               </View>
+              {/* Lock/incomplete details */}
+              {availStatus && !availStatus.can_enable && !available ? (
+                <View style={styles.lockBanner} testID="availability-locked-banner">
+                  <Ionicons name="alert-circle" size={16} color={colors.error} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    {availStatus.reasons.map((r, i) => (
+                      <Body key={i} style={{ fontSize: 12, color: colors.error, marginBottom: 2 }}>
+                        {r}
+                      </Body>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+              {/* Profile completion progress */}
+              {availStatus && !availStatus.profile_complete ? (
+                <View style={styles.progressWrap}>
+                  {(() => {
+                    const total = 6; // name, skills, level, wage, exp, city
+                    const done = total - availStatus.missing_fields.length;
+                    const pct = Math.round((done / total) * 100);
+                    return (
+                      <>
+                        <View style={styles.progressHeader}>
+                          <Muted style={{ fontSize: 11, fontWeight: "700" }}>
+                            Profile {pct}% complete ({done}/{total})
+                          </Muted>
+                          <Muted style={{ fontSize: 10 }}>
+                            Missing: {availStatus.missing_fields.join(", ")}
+                          </Muted>
+                        </View>
+                        <View style={styles.progressTrack}>
+                          <View style={[styles.progressBar, { width: `${pct}%` }]} />
+                        </View>
+                      </>
+                    );
+                  })()}
+                </View>
+              ) : null}
             </Card>
 
             {/* Job title */}
             <Card>
               <Body style={{ fontWeight: "700", marginBottom: 4 }} testID="section-job-title">Job title</Body>
-              <Muted style={{ fontSize: 12, marginBottom: 10 }}>Select all trades you can do</Muted>
+              <Muted style={{ fontSize: 12, marginBottom: 10 }}>
+                Select your primary trade (choose one)
+              </Muted>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {SKILLS.map((s) => (
                   <Chip
                     key={s}
                     testID={`profile-jobtitle-${s}`}
                     label={s}
-                    selected={skills.includes(s)}
+                    selected={skills[0] === s}
                     onPress={() => toggleSkill(s)}
                   />
                 ))}
@@ -550,5 +658,34 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+  },
+  lockBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 12,
+    padding: 10,
+    borderRadius: radius.md,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  progressWrap: {
+    marginTop: 12,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.surfaceSecondary,
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: colors.brand,
+    borderRadius: 3,
   },
 });

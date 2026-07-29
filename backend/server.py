@@ -669,9 +669,118 @@ async def aadhaar_verify(body: AadhaarIn, user=Depends(current_user)):
 async def me(user=Depends(current_user)):
     return user
 
+
+# --- Availability rules & check ---
+async def _availability_status_for(user: dict) -> dict:
+    """
+    Compute availability rules for a worker.
+    - `profile_complete`: all mandatory fields filled.
+    - `is_currently_hired`: worker has at least one accepted application, OR an open check-in without check-out.
+    - `can_enable`: True only when profile is complete AND not currently hired.
+    Returns clear reasons list for the UI to show.
+    """
+    if user.get("role") != "worker":
+        return {
+            "can_enable": True,
+            "profile_complete": True,
+            "missing_fields": [],
+            "is_currently_hired": False,
+            "reasons": [],
+            "current_available": bool(user.get("available", True)),
+        }
+
+    required = {
+        "name": "Name",
+        "skills": "Job title",
+        "experience_level": "Skill level",
+        "daily_wage": "Expected daily wage",
+        "experience_years": "Experience (years)",
+        "city": "City",
+    }
+    missing = []
+    for key, label in required.items():
+        val = user.get(key)
+        if key == "skills":
+            if not val or not isinstance(val, list) or len(val) == 0:
+                missing.append(label)
+        elif key in ("daily_wage", "experience_years"):
+            try:
+                if not val or int(val) <= 0:
+                    missing.append(label)
+            except Exception:
+                missing.append(label)
+        else:
+            if not val or (isinstance(val, str) and not val.strip()):
+                missing.append(label)
+
+    profile_complete = len(missing) == 0
+
+    # Currently hired = any accepted application not yet closed
+    accepted = await db.applications.count_documents({
+        "worker_id": user["id"],
+        "status": "accepted",
+    })
+    is_currently_hired = accepted > 0
+
+    reasons = []
+    if not profile_complete:
+        reasons.append(
+            "Complete your profile before going online. Missing: " + ", ".join(missing)
+        )
+    if is_currently_hired:
+        reasons.append(
+            "You are currently hired on a job. Availability must remain OFF until the job is completed."
+        )
+
+    can_enable = profile_complete and not is_currently_hired
+
+    return {
+        "can_enable": can_enable,
+        "profile_complete": profile_complete,
+        "missing_fields": missing,
+        "is_currently_hired": is_currently_hired,
+        "active_jobs_count": accepted,
+        "reasons": reasons,
+        "current_available": bool(user.get("available", True)),
+    }
+
+
+@api.get("/me/availability-status")
+async def me_availability_status(user=Depends(current_user)):
+    status = await _availability_status_for(user)
+    # Auto-enforce rules 1 & 2 on read: if profile incomplete OR currently hired but flag is ON, force OFF
+    if (
+        user.get("role") == "worker"
+        and status.get("current_available")
+        and not status.get("can_enable")
+    ):
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {"available": False, "availability_auto_off_at": now_iso()}},
+        )
+        status["current_available"] = False
+    return status
+
+
 @api.put("/me")
 async def update_me(body: ProfileUpdate, user=Depends(current_user)):
     update = {k: v for k, v in body.model_dump().items() if v is not None}
+
+    # Enforce Availability rules on workers when turning ON
+    if user.get("role") == "worker" and update.get("available") is True:
+        # Build hypothetical merged user for the check (apply pending updates first)
+        merged = {**user, **update}
+        status = await _availability_status_for(merged)
+        if not status["can_enable"]:
+            raise HTTPException(400, "; ".join(status["reasons"]) or "Cannot turn on Availability yet.")
+
+    # Enforce single-select job title for workers
+    if user.get("role") == "worker" and "skills" in update:
+        sk = update["skills"] or []
+        if isinstance(sk, list) and len(sk) > 1:
+            # Keep only the first — enforces single-select even if a rogue client sends more
+            update["skills"] = sk[:1]
+
     if update:
         await db.users.update_one({"id": user["id"]}, {"$set": update})
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
@@ -836,6 +945,12 @@ async def update_application_status(app_id: str, body: ApplicationStatusIn, user
     # If job is still 'open' and we accepted someone, mark it in_progress
     if body.status == "accepted" and job.get("status") == "open":
         await db.jobs.update_one({"id": appn["job_id"]}, {"$set": {"status": "in_progress"}})
+    # Auto-toggle worker availability off while they are hired
+    if body.status == "accepted":
+        await db.users.update_one(
+            {"id": appn["worker_id"]},
+            {"$set": {"available": False, "availability_auto_off_at": now_iso()}},
+        )
     return {"ok": True, "status": body.status}
 
 @api.post("/jobs/{job_id}/status")

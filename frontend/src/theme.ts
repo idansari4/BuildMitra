@@ -39,12 +39,26 @@ export const type = {
 };
 
 export const SKILLS = [
-  "Mason", "Painter", "Electrician", "Plumber", "Carpenter",
-  "Tile Worker", "POP Worker", "Steel Fixer",
-  "Scaffolding Worker", "Concrete Worker",
-  "Fabrication Worker", "Marbal Mason", "Marbal Ghisai Worker",
-  "Shuttering Carpenter", "Wood Polisher", "Gypsum Worker",
-  "Glass Installer", "AC Technician", "CCTV Installer", "Duct Installer",
+  "AC Technician",
+  "CCTV Installer",
+  "Carpenter",
+  "Concrete Worker",
+  "Duct Installer",
+  "Electrician",
+  "Fabrication Worker",
+  "Glass Installer",
+  "Gypsum Worker",
+  "Marbal Ghisai Worker",
+  "Marbal Mason",
+  "Mason",
+  "POP Worker",
+  "Painter",
+  "Plumber",
+  "Scaffolding Worker",
+  "Shuttering Carpenter",
+  "Steel Fixer",
+  "Tile Worker",
+  "Wood Polisher",
 ];
 
 export const EXPERIENCE_LEVELS = [
