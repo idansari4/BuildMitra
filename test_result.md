@@ -189,6 +189,18 @@ frontend:
           agent: "main"
           comment: "Iter 24 — 4 business rules added. (1) Availability CANNOT be turned ON until profile is 100% complete (all 6 fields: name, skills, experience_level, daily_wage, experience_years, city). Backend enforces via _availability_status_for + PUT /me 400 error; frontend shows red lock banner + progress bar with missing field names + disabled Switch. (2) Availability MUST stay OFF during active hiring (any accepted application). Backend enforces same way + on GET /me/availability-status auto-forces to false if worker was ON but is now hired. Also auto-toggles off on POST /applications/{id}/status when status=accepted. (3) Job title selection is now SINGLE-SELECT: frontend toggleSkill sets [s] or [] (mutual exclusion); backend PUT /me trims skills to first element for workers to enforce even if client sends multiple. Subtitle updated to 'Select your primary trade (choose one)'. (4) SKILLS array in theme.ts sorted alphabetically (A-Z): AC Technician, CCTV Installer, Carpenter, Concrete Worker, Duct Installer, Electrician, Fabrication Worker, Glass Installer, Gypsum Worker, Marbal Ghisai Worker, Marbal Mason, Mason, POP Worker, Painter, Plumber, Scaffolding Worker, Shuttering Carpenter, Steel Fixer, Tile Worker, Wood Polisher. NEW backend endpoint: GET /api/me/availability-status returns { can_enable, profile_complete, missing_fields, is_currently_hired, active_jobs_count, reasons, current_available }. NEW frontend api method: api.availabilityStatus()."
 
+  - task: "Client Profile — Comprehensive redesign (13 sections)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/(tabs)/profile.tsx, /app/frontend/src/components/client-profile-body.tsx, /app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Iter 25 — Complete Client Profile redesign. Backend: extended ProfileUpdate with business_type, contact_person, email, gst_number, pan_number, website, company_description, state, address, pin_code, map_location, plus 4 document base64 fields. NEW GET /api/me/client-stats aggregates jobs_posted/active_jobs/workers_hired/contractors_hired/completed_projects/wallet/escrow/total_payments/ontime_payment_pct/rating/hiring_success_rate/avg_response_hours/verifications/trust_score(0-100)/badges/missing_fields/completion_pct/is_hiring_now. Frontend: new dedicated ClientProfileBody component with hero header (verified badge, ID, city+state, joined), Profile Completion bar, Badges strip (Verified Client / Trusted Employer / On-Time Payer / Top Hiring Company / Hiring Now pulse), Company Information (name, business type chips, contact, mobile RO, email, GST, PAN, website, description textarea), Location (state/city/address/pin + Maps link), sticky Save button, 6 Company Stats cards, Trust score circle + 5 verification rows, 4 Payment Performance cards, Ratings gradient banner, Documents rows, Quick Actions cards. Works for client AND contractor. Worker section untouched."
+
 backend:
   - task: "POST /auth/register accepts role field"
     implemented: true

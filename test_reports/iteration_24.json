@@ -1,0 +1,29 @@
+{
+  "summary": "Iter 25 Client Profile redesign fully validated. Backend: 5/5 pytest tests pass — GET /api/me/client-stats returns 200 with all 20 required keys (verifications dict with 5 bool keys, trust_score int 0-100, badges list, missing_fields, completion_pct, is_hiring_now, etc.) for client + contractor, 403 for worker, 401 unauth. PUT /api/me accepts new client fields (business_type, contact_person, email, gst_number, pan_number, website, company_description, state, address, pin_code) and persists — completion_pct rises after update. Frontend (390x844): CLIENT profile renders profile-name 'Sharma Builders' with verified check, 'CLIENT · 9000000001', 'ID: e3a15fbd', rating '⭐ 4.6 (12 reviews)', 'Mumbai, Maharashtra', 'Joined Jun 2026'. All required testIDs present: client-completion-card (91% orange bar), client-badges (Trusted Employer + Top Hiring Company + green pulsing 'Hiring Now'), section-company-info with bt-Individual/Contractor/Builder/Developer/Company chips (single-select verified), field-company-name/contact-person/mobile(readonly)/email/gst/pan/website/description, section-location + field-state/city/address/pin + open-map, client-save-profile, section-stats (6 cells: Jobs Posted 37, Active Jobs 25, Workers Hired 1, Contractors Hired 0, Completed Projects 8, Joined Jun 2026), section-trust (trust score 81/100, 5 verification rows: Mobile Verified + Aadhaar Verified show green Verified pill), section-payments (Wallet ₹100, Escrow ₹0, Total Payments ₹0, On-Time 100%), section-ratings (gradient banner 4.6 stars, 12 reviews, Hiring Success 81%, Avg Response ~4h), section-documents (4 rows GST/PAN/Company Reg/Trade License), Quick Actions heading + 5 pressable cards, legacy links (help-support-link, change-password-link, leave-link, project-progress-link, payroll-link, chat-link, lang-en, lang-hi) still render. Save flow works: typed test@sharma.com + PIN 400001 + tapped bt-Builder → 'Saved ✓' toast appeared → reload persists values. CONTRACTOR (9000000003): header shows 'CONTRACTOR · 9000000003', all 8 client sections render identically. WORKER (9000000002): worker-only UI (availability-card, section-job-title chips, my skills) renders; ZERO client sections leak into worker view. No red screen, no console errors observed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter25_client_profile.py",
+    "/app/test_reports/pytest/iter25_client_profile.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py client-stats uses `user.get(key)` to compute missing_fields, but `user` from Depends(current_user) may be stale after PUT within same request context (n/a for cross-request testing; verified after PUT+GET separately — completion_pct did rise correctly).",
+    "client-profile-body.tsx is 582 lines — under 700-line threshold, but approaching. Consider splitting sub-components (SectionCard/StatCell/VerifyRow/DocRow/QuickCard) into a separate file if this grows further.",
+    "avg_response_hours and ontime_payment_pct in me_client_stats are demo proxies (`75 + count%25`, hardcoded by rating tier). Fine for MVP; document as such."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter25_client_profile.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100%"},
+  "seed_data_creation": "None. Existing seeded demo accounts used. Test PUT modified Sharma Builders client (business_type=Builder, email=test@sharma.com, gst/pan/website/description/state/address/pin_code=400001). completion_pct went from ~18% to 91%.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sharma Builders client (9000000001) now has fully populated profile fields from iter25 testing (business_type=Builder, contact_person=Amit, email=test@sharma.com, gst=27ABCDE1234F1Z5, pan=AAAAA9999A, website=https://sharma.com, description='Premium construction', state=Maharashtra, address='12 MG Road', pin=400001). completion_pct sits at ~91% (missing only company logo photo).",
+  "rca_of_issue": "N/A — no bugs found."
+}

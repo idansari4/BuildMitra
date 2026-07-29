@@ -9,6 +9,7 @@ import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
 import { colors, radius, spacing, SKILLS, EXPERIENCE_LEVELS, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card, Chip, PrimaryButton, Field, SecondaryButton } from "@/src/ui";
+import ClientProfileBody from "@/src/components/client-profile-body";
 
 export default function Profile() {
   const router = useRouter();
@@ -255,13 +256,33 @@ export default function Profile() {
             </View>
           </Pressable>
           <View style={{ flex: 1 }}>
-            <H1 style={{ fontSize: t.xl }} testID="profile-name">{user?.name}</H1>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <H1 style={{ fontSize: t.xl }} testID="profile-name" numberOfLines={2}>{user?.name}</H1>
+              {user?.aadhaar_verified ? (
+                <Ionicons name="checkmark-circle" size={18} color={colors.brand} />
+              ) : null}
+            </View>
             <Muted>{String(user?.role).toUpperCase()} · {user?.mobile}</Muted>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+            {user?.role === "client" || user?.role === "contractor" ? (
+              <Muted style={{ fontSize: 11 }}>ID: {user?.id?.slice(0, 8)}</Muted>
+            ) : null}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
               <Ionicons name="star" size={14} color={colors.brand} />
               <Body style={{ fontWeight: "700" }}>{user?.rating_avg?.toFixed(1) || "0.0"}</Body>
               <Muted>({user?.rating_count || 0} {tr("common.reviews")})</Muted>
+              {(user?.city || user?.state) ? (
+                <>
+                  <Muted> · </Muted>
+                  <Ionicons name="location" size={12} color={colors.onSurfaceSecondary} />
+                  <Muted>{[user?.city, user?.state].filter(Boolean).join(", ")}</Muted>
+                </>
+              ) : null}
             </View>
+            {user?.created_at ? (
+              <Muted style={{ fontSize: 11, marginTop: 2 }}>
+                Joined {new Date(user.created_at).toLocaleDateString("en", { month: "short", year: "numeric" })}
+              </Muted>
+            ) : null}
           </View>
         </View>
 
@@ -402,6 +423,12 @@ export default function Profile() {
             <Field testID="exp-field" label={tr("profile.experience")} value={exp} onChangeText={setExp} keyboardType="number-pad" />
             <Field testID="city-field" label={tr("profile.city")} value={city} onChangeText={setCity} placeholder={tr("profile.cityPh")} />
           </>
+        ) : user?.role === "client" || user?.role === "contractor" ? (
+          <ClientProfileBody
+            user={user}
+            onSaved={refresh}
+            onNavigate={(route) => router.push(route as any)}
+          />
         ) : (
           <>
             <Field testID="company-field" label={tr("profile.company")} value={company} onChangeText={setCompany} />
@@ -410,7 +437,9 @@ export default function Profile() {
         )}
 
         {msg ? <Body style={{ color: msg.includes("✓") ? colors.success : colors.error }}>{msg}</Body> : null}
-        <PrimaryButton testID="save-profile" label={tr("profile.save")} icon="checkmark-circle-outline" loading={busy} onPress={save} />
+        {(isWorker || (user?.role !== "client" && user?.role !== "contractor")) ? (
+          <PrimaryButton testID="save-profile" label={tr("profile.save")} icon="checkmark-circle-outline" loading={busy} onPress={save} />
+        ) : null}
 
         <H2 style={{ marginTop: spacing.md }}>{tr("profile.settings")}</H2>
 
