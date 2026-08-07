@@ -779,18 +779,16 @@ async def me_client_stats(user=Depends(current_user)):
     if jobs_total >= 10:
         badges.append("Top Hiring Company")
 
-    # Profile completion for client
+    # Profile completion for client (reflects UI-visible fields only)
     required = [
-        ("company_name", "Company name"),
+        ("company_name", "Business name"),
         ("business_type", "Business type"),
         ("contact_person", "Contact person"),
-        ("email", "Email"),
         ("city", "City"),
         ("state", "State"),
         ("address", "Address"),
         ("pin_code", "PIN code"),
         ("gst_number", "GST number"),
-        ("company_description", "About company"),
         ("photo", "Company logo"),
     ]
     missing = []
