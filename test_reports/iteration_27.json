@@ -1,0 +1,58 @@
+{
+  "summary": "Iter 27 Contractor & Client Profile changes verified end-to-end via Playwright on mobile viewport (390x844). All 3 verification targets pass: contractor shows 'Contractor Information' + no Business Type chips, client shows 'Client Information' + all 5 BT chips present, worker unaffected. Consolidated 'Setting' heading (singular) appears exactly once for all 3 roles. Role-gated links (my-reviews-link, notification-settings-link) render for client+contractor only. Business Name save+persistence flow works for both contractor (Patel Construction Co UPDATED) and client (Sharma Builders UPDATED). No backend testing per request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' emitted repeatedly. Existing pre-iter-27 issue in shared styles (client-profile-body.tsx sectionCard/quickCard, profile.tsx). Not blocking iter 27 verification but should be migrated to boxShadow for react-native-web parity."}
+    ]
+  },
+  "verification_results": {
+    "contractor": {
+      "section-company-info-text": "Contractor Information (correct)",
+      "bt_chips_absent": true,
+      "setting_heading_count": 1,
+      "setting_heading_text": "Setting",
+      "settings_links_present": ["help-support-link", "my-reviews-link", "notification-settings-link", "change-password-link", "leave-link", "project-progress-link"],
+      "save_persist": true,
+      "save_value_verified": "Patel Construction Co UPDATED"
+    },
+    "client": {
+      "section-company-info-text": "Client Information (correct)",
+      "bt_chips_all_present": true,
+      "setting_heading_count": 1,
+      "setting_heading_text": "Setting",
+      "settings_links_present": ["help-support-link", "my-reviews-link", "notification-settings-link", "change-password-link", "leave-link", "project-progress-link"],
+      "save_persist": true,
+      "save_value_verified": "Sharma Builders UPDATED"
+    },
+    "worker": {
+      "section-company-info_absent": true,
+      "my-reviews-link_absent": true,
+      "notification-settings-link_absent": true,
+      "availability-card_present": true,
+      "section-job-title_present": true,
+      "section-my-skills_present": true,
+      "worker_settings_links": ["help-support-link", "change-password-link", "salary-summary-link", "leave-link"],
+      "setting_heading_count": 1
+    }
+  },
+  "test_report_links": ["/app/test_reports/iter27_test_script.py"],
+  "action_items": [
+    "Optional cleanup: migrate remaining 'shadow*' style props (client-profile-body.tsx sectionCard/quickCard and profile.tsx) to 'boxShadow' to silence react-native-web deprecation warnings."
+  ],
+  "critical_code_review_comments": [
+    "client-profile-body.tsx: isContractor branch correctly hides Business Type block; SectionCard title dynamically switches between 'Contractor Information' and 'Client Information'.",
+    "profile.tsx L455-474: my-reviews-link + notification-settings-link correctly gated to client OR contractor role.",
+    "i18n.tsx L152: 'profile.settings' is 'Setting' (en) / 'सेटिंग' (hi) as expected.",
+    "Minor nit: notification-settings-link routes to '/help' (not a dedicated notification screen) — likely placeholder; flag for main agent to eventually wire real route."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "seed_data_creation": "None. Modified & restored business_name for client (9000000001) and contractor (9000000003) during save-persistence check.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 27 profile role differentiation fully verified. If iter 28 touches profile.tsx or client-profile-body.tsx, re-run the same 3-role checks: (1) section-company-info title text per role, (2) bt-* chip visibility per role, (3) exact-one 'Setting' heading with correct role-gated links, (4) client-save-profile persistence for client & contractor. notification-settings-link currently points at /help placeholder route."
+}

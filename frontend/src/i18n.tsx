@@ -149,7 +149,7 @@ const dict: Record<string, { en: string; hi: string }> = {
   "profile.cityPh": { en: "e.g. Mumbai", hi: "जैसे मुंबई" },
   "profile.company": { en: "Company Name", hi: "कंपनी का नाम" },
   "profile.save": { en: "Save Profile", hi: "प्रोफ़ाइल सेव करें" },
-  "profile.settings": { en: "Settings", hi: "सेटिंग्स" },
+  "profile.settings": { en: "Setting", hi: "सेटिंग" },
   "profile.language": { en: "Language", hi: "भाषा" },
   "profile.aadhaar": { en: "Aadhaar", hi: "आधार" },
   "profile.whatsapp": { en: "WhatsApp Support", hi: "WhatsApp सपोर्ट" },

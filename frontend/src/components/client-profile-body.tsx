@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
 import { colors, radius, spacing, type as t } from "@/src/theme";
-import { Body, Muted, Card, H2, Field, PrimaryButton, Chip } from "@/src/ui";
+import { Body, Muted, Card, Field, PrimaryButton, Chip } from "@/src/ui";
 
 /* ------------------------------------------------------------
    Client Profile Body — used in profile.tsx for role=client (and contractor).
@@ -44,7 +44,8 @@ type Props = {
   onNavigate?: (route: string) => void;
 };
 
-export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) {
+export default function ClientProfileBody({ user, onSaved, onNavigate: _onNavigate }: Props) {
+  const isContractor = user?.role === "contractor";
   const [stats, setStats] = useState<ClientStats | null>(null);
   const [companyName, setCompanyName] = useState(user?.company_name || user?.name || "");
   const [businessType, setBusinessType] = useState(user?.business_type || "");
@@ -142,21 +143,29 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
         </View>
       ) : null}
 
-      {/* Client Information */}
-      <SectionCard icon="business" title="Client Information" testID="section-company-info">
+      {/* Client / Contractor Information */}
+      <SectionCard
+        icon="business"
+        title={isContractor ? "Contractor Information" : "Client Information"}
+        testID="section-company-info"
+      >
         <Field label="Business Name" value={companyName} onChangeText={setCompanyName} placeholder="e.g., ABC Construction" testID="field-company-name" />
-        <Body style={{ fontWeight: "700", marginTop: 4, fontSize: 13 }}>Business Type</Body>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8, marginBottom: 12 }}>
-          {BUSINESS_TYPES.map((b) => (
-            <Chip
-              key={b}
-              testID={`bt-${b}`}
-              label={b}
-              selected={businessType === b}
-              onPress={() => setBusinessType(businessType === b ? "" : b)}
-            />
-          ))}
-        </View>
+        {isContractor ? null : (
+          <>
+            <Body style={{ fontWeight: "700", marginTop: 4, fontSize: 13 }}>Business Type</Body>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8, marginBottom: 12 }}>
+              {BUSINESS_TYPES.map((b) => (
+                <Chip
+                  key={b}
+                  testID={`bt-${b}`}
+                  label={b}
+                  selected={businessType === b}
+                  onPress={() => setBusinessType(businessType === b ? "" : b)}
+                />
+              ))}
+            </View>
+          </>
+        )}
         <Field label="Contact Person" value={contactPerson} onChangeText={setContactPerson} placeholder="Name" testID="field-contact-person" />
         <Field label="Mobile" value={user?.mobile || ""} editable={false} testID="field-mobile" />
         <Field label="GST Number (Optional)" value={gst} onChangeText={setGst} placeholder="e.g., 27ABCDE1234F1Z5" autoCapitalize="characters" testID="field-gst" />
@@ -204,11 +213,6 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
       {msg ? (
         <Body style={{ color: msg.includes("✓") ? colors.success : colors.error, textAlign: "center" }}>{msg}</Body>
       ) : null}
-
-      {/* Setting section */}
-      <H2 style={{ marginTop: spacing.sm }}>Setting</H2>
-      <QuickCard icon="star" label="My Reviews" hint="See what workers say" onPress={() => onNavigate?.("/rating")} />
-      <QuickCard icon="notifications" label="Notification Settings" hint="Push, email preferences" onPress={() => onNavigate?.("/help")} />
     </View>
   );
 }
@@ -236,31 +240,6 @@ function SectionCard({
       </View>
       <View style={{ marginTop: spacing.sm }}>{children}</View>
     </Card>
-  );
-}
-
-function QuickCard({
-  icon,
-  label,
-  hint,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  hint: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.quickCard}>
-      <View style={styles.quickIcon}>
-        <Ionicons name={icon} size={20} color={colors.brand} />
-      </View>
-      <View style={{ flex: 1, marginHorizontal: 10 }}>
-        <Body style={{ fontWeight: "800" }}>{label}</Body>
-        <Muted style={{ fontSize: 11, marginTop: 2 }}>{hint}</Muted>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.borderStrong} />
-    </Pressable>
   );
 }
 

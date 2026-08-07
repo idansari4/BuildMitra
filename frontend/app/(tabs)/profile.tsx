@@ -452,6 +452,27 @@ export default function Profile() {
           <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
         </Pressable>
 
+        {(user?.role === "client" || user?.role === "contractor") && (
+          <>
+            <Pressable testID="my-reviews-link" onPress={() => router.push("/rating" as any)} style={styles.payrollLink}>
+              <Ionicons name="star" size={22} color={colors.brand} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Body style={{ fontWeight: "700" }}>My Reviews</Body>
+                <Muted style={{ fontSize: 11 }}>See what workers say</Muted>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+            </Pressable>
+            <Pressable testID="notification-settings-link" onPress={() => router.push("/help" as any)} style={styles.payrollLink}>
+              <Ionicons name="notifications" size={22} color={colors.brand} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Body style={{ fontWeight: "700" }}>Notification Settings</Body>
+                <Muted style={{ fontSize: 11 }}>Push, email preferences</Muted>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
+            </Pressable>
+          </>
+        )}
+
         <Pressable testID="change-password-link" onPress={() => setPwModal(true)} style={styles.payrollLink}>
           <Ionicons name="key" size={22} color={colors.brand} />
           <View style={{ flex: 1, marginLeft: 12 }}>
