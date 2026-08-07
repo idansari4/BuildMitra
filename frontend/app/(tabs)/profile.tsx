@@ -7,10 +7,11 @@ import * as ImagePicker from "expo-image-picker";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
-import { colors, radius, spacing, SKILLS, EXPERIENCE_LEVELS, type as t } from "@/src/theme";
+import { colors, radius, spacing, SKILLS, EXPERIENCE_LEVELS, normalizeExperienceLevel, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card, Chip, PrimaryButton, Field } from "@/src/ui";
 import ClientProfileBody from "@/src/components/client-profile-body";
 import SettingsMenu from "@/src/components/settings-menu";
+import Dropdown from "@/src/components/dropdown";
 
 export default function Profile() {
   const router = useRouter();
@@ -19,7 +20,7 @@ export default function Profile() {
   const isWorker = user?.role === "worker";
   const [skills, setSkills] = useState<string[]>(user?.skills || []);
   const [experienceLevel, setExperienceLevel] = useState<string>(
-    (user as any)?.experience_level || ""
+    normalizeExperienceLevel((user as any)?.experience_level) || ""
   );
   const [available, setAvailable] = useState<boolean>(
     (user as any)?.available !== false // default true if undefined
@@ -28,6 +29,21 @@ export default function Profile() {
   const [city, setCity] = useState(user?.city || "");
   const [company, setCompany] = useState(user?.company_name || "");
   const [exp, setExp] = useState(String(user?.experience_years || ""));
+  // New worker-specific fields
+  const [age, setAge] = useState(
+    (user as any)?.age != null ? String((user as any).age) : ""
+  );
+  const [gender, setGender] = useState<string>((user as any)?.gender || "");
+  const [overtimeAccepted, setOvertimeAccepted] = useState<boolean | null>(
+    typeof (user as any)?.overtime_accepted === "boolean"
+      ? (user as any).overtime_accepted
+      : null
+  );
+  const [minorToolsAvailable, setMinorToolsAvailable] = useState<boolean | null>(
+    typeof (user as any)?.minor_tools_available === "boolean"
+      ? (user as any).minor_tools_available
+      : null
+  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [aadhaarModal, setAadhaarModal] = useState(false);
@@ -94,9 +110,8 @@ export default function Profile() {
     fetchAvailStatus();
   }, [fetchAvailStatus]);
 
-  // Single-select for Job title (worker)
-  const toggleSkill = (s: string) =>
-    setSkills((cur) => (cur[0] === s ? [] : [s]));
+  // Single-select for Job title (worker) — via Dropdown component below
+  // (legacy chip-based helper removed)
 
   const toggleAvailability = async (val: boolean) => {
     // If turning ON, respect rules — block with clear message
@@ -130,7 +145,7 @@ export default function Profile() {
   const save = async () => {
     setBusy(true); setMsg("");
     try {
-      await api.updateMe({
+      const payload: any = {
         skills,
         experience_level: experienceLevel || null,
         available,
@@ -138,7 +153,14 @@ export default function Profile() {
         experience_years: parseInt(exp) || 0,
         city,
         company_name: company,
-      });
+      };
+      if (isWorker) {
+        payload.age = age ? parseInt(age) || 0 : 0;
+        payload.gender = gender || null;
+        if (overtimeAccepted !== null) payload.overtime_accepted = overtimeAccepted;
+        if (minorToolsAvailable !== null) payload.minor_tools_available = minorToolsAvailable;
+      }
+      await api.updateMe(payload);
       await refresh();
       await fetchAvailStatus();
       setMsg(tr("common.saved"));
@@ -272,9 +294,6 @@ export default function Profile() {
               ) : null}
             </View>
             <Muted>{String(user?.role).toUpperCase()} · {user?.mobile}</Muted>
-            {user?.role === "client" || user?.role === "contractor" ? (
-              <Muted style={{ fontSize: 11 }}>ID: {user?.id?.slice(0, 8)}</Muted>
-            ) : null}
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
               <Ionicons name="star" size={14} color={colors.brand} />
               <Body style={{ fontWeight: "700" }}>{user?.rating_avg?.toFixed(1) || "0.0"}</Body>
@@ -287,7 +306,7 @@ export default function Profile() {
                 </>
               ) : null}
             </View>
-            {user?.created_at ? (
+            {isWorker && user?.created_at ? (
               <Muted style={{ fontSize: 11, marginTop: 2 }}>
                 Joined {new Date(user.created_at).toLocaleDateString("en", { month: "short", year: "numeric" })}
               </Muted>
@@ -392,45 +411,105 @@ export default function Profile() {
               ) : null}
             </Card>
 
-            {/* Job title */}
+            {/* Job title dropdown (single-select, searchable) */}
             <Card>
-              <Body style={{ fontWeight: "700", marginBottom: 4 }} testID="section-job-title">Job title</Body>
-              <Muted style={{ fontSize: 12, marginBottom: 10 }}>
-                Select your primary trade (choose one)
-              </Muted>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {SKILLS.map((s) => (
-                  <Chip
-                    key={s}
-                    testID={`profile-jobtitle-${s}`}
-                    label={s}
-                    selected={skills[0] === s}
-                    onPress={() => toggleSkill(s)}
-                  />
-                ))}
-              </View>
+              <Dropdown
+                testID="worker-job-title"
+                label="Job Title"
+                value={skills[0] || ""}
+                options={SKILLS}
+                onSelect={(v) => setSkills([v])}
+                placeholder="Select your primary trade"
+                searchable
+              />
+              <Dropdown
+                testID="worker-skill-level"
+                label="My Skills / Experience Level"
+                value={normalizeExperienceLevel(experienceLevel)}
+                options={EXPERIENCE_LEVELS}
+                onSelect={setExperienceLevel}
+                placeholder="Choose experience level"
+              />
             </Card>
 
-            {/* My skills (experience level) */}
+            {/* Worker Details — compact two-column layout */}
             <Card>
-              <Body style={{ fontWeight: "700", marginBottom: 4 }} testID="section-my-skills">My skills</Body>
-              <Muted style={{ fontSize: 12, marginBottom: 10 }}>Choose your experience level</Muted>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {EXPERIENCE_LEVELS.map((lvl) => (
-                  <Chip
-                    key={lvl}
-                    testID={`profile-skill-level-${lvl}`}
-                    label={lvl}
-                    selected={experienceLevel === lvl}
-                    onPress={() => setExperienceLevel(experienceLevel === lvl ? "" : lvl)}
+              <Body style={{ fontWeight: "800", marginBottom: 12 }} testID="section-worker-details">
+                Worker Details
+              </Body>
+
+              {/* Row 1: Wage + Experience */}
+              <View style={styles.twoCol}>
+                <View style={styles.col}>
+                  <Field
+                    testID="wage-field"
+                    label="Expected Daily Wages (₹)"
+                    value={wage}
+                    onChangeText={setWage}
+                    keyboardType="number-pad"
+                    placeholder="e.g., 800"
                   />
-                ))}
+                </View>
+                <View style={styles.col}>
+                  <Field
+                    testID="exp-field"
+                    label="Experience (Years)"
+                    value={exp}
+                    onChangeText={setExp}
+                    keyboardType="number-pad"
+                    placeholder="e.g., 5"
+                  />
+                </View>
               </View>
+
+              {/* Row 2: Age + Gender */}
+              <View style={styles.twoCol}>
+                <View style={styles.col}>
+                  <Field
+                    testID="age-field"
+                    label="Age"
+                    value={age}
+                    onChangeText={setAge}
+                    keyboardType="number-pad"
+                    placeholder="e.g., 28"
+                  />
+                </View>
+                <View style={styles.col}>
+                  <Dropdown
+                    testID="gender-field"
+                    label="Gender"
+                    value={gender}
+                    options={["Male", "Female"]}
+                    onSelect={setGender}
+                    placeholder="Select"
+                  />
+                </View>
+              </View>
+
+              {/* Overtime */}
+              <YesNoRow
+                label="Overtime Accepted"
+                value={overtimeAccepted}
+                onChange={setOvertimeAccepted}
+                testID="overtime-row"
+              />
+
+              {/* Minor tools */}
+              <YesNoRow
+                label="Tools Availability (Minor Tools)"
+                value={minorToolsAvailable}
+                onChange={setMinorToolsAvailable}
+                testID="minor-tools-row"
+              />
             </Card>
 
-            <Field testID="wage-field" label={tr("profile.expectedWage")} value={wage} onChangeText={setWage} keyboardType="number-pad" />
-            <Field testID="exp-field" label={tr("profile.experience")} value={exp} onChangeText={setExp} keyboardType="number-pad" />
-            <Field testID="city-field" label={tr("profile.city")} value={city} onChangeText={setCity} placeholder={tr("profile.cityPh")} />
+            <Field
+              testID="city-field"
+              label={tr("profile.city")}
+              value={city}
+              onChangeText={setCity}
+              placeholder={tr("profile.cityPh")}
+            />
           </>
         ) : user?.role === "client" || user?.role === "contractor" ? (
           <ClientProfileBody
@@ -615,6 +694,56 @@ function Row({ icon, label, value }: { icon: any; label: string; value: string }
   );
 }
 
+function YesNoRow({
+  label,
+  value,
+  onChange,
+  testID,
+}: {
+  label: string;
+  value: boolean | null;
+  onChange: (v: boolean) => void;
+  testID?: string;
+}) {
+  return (
+    <View style={styles.yesNoWrap} testID={testID}>
+      <Body style={styles.yesNoLabel} numberOfLines={2}>
+        {label}
+      </Body>
+      <View style={styles.yesNoBtnGroup}>
+        <Pressable
+          testID={testID ? `${testID}-yes` : undefined}
+          onPress={() => onChange(true)}
+          style={[styles.yesNoBtn, value === true && styles.yesNoBtnOn]}
+        >
+          <Body
+            style={[
+              styles.yesNoBtnText,
+              value === true && styles.yesNoBtnTextOn,
+            ]}
+          >
+            Yes
+          </Body>
+        </Pressable>
+        <Pressable
+          testID={testID ? `${testID}-no` : undefined}
+          onPress={() => onChange(false)}
+          style={[styles.yesNoBtn, value === false && styles.yesNoBtnOn]}
+        >
+          <Body
+            style={[
+              styles.yesNoBtnText,
+              value === false && styles.yesNoBtnTextOn,
+            ]}
+          >
+            No
+          </Body>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.sm },
   avatarWrap: { width: 72, height: 72, position: "relative" },
@@ -696,5 +825,52 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: colors.brand,
     borderRadius: 3,
+  },
+  twoCol: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  col: {
+    flex: 1,
+    minWidth: 0,
+  },
+  yesNoWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+    gap: 12,
+  },
+  yesNoLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.onSurfaceSecondary,
+    fontWeight: "600",
+  },
+  yesNoBtnGroup: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    overflow: "hidden",
+  },
+  yesNoBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    minWidth: 62,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  yesNoBtnOn: {
+    backgroundColor: colors.brand,
+  },
+  yesNoBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.onSurfaceSecondary,
+  },
+  yesNoBtnTextOn: {
+    color: colors.onBrandPrimary,
   },
 });

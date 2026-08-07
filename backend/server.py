@@ -195,13 +195,18 @@ class ProfileUpdate(BaseModel):
     photo: Optional[str] = None  # base64
     skills: Optional[List[str]] = None
     experience_years: Optional[int] = None
-    experience_level: Optional[str] = None  # Full trained / Semi trained / Helper / Supervisor
+    experience_level: Optional[str] = None  # Full Trained / Semi Trained / Helper / Site Supervisor
     daily_wage: Optional[int] = None
     available: Optional[bool] = None
     city: Optional[str] = None
     company_name: Optional[str] = None
     aadhaar_verified: Optional[bool] = None
     language: Optional[str] = None
+    # Worker-specific extended fields
+    age: Optional[int] = None
+    gender: Optional[str] = None  # Male / Female
+    overtime_accepted: Optional[bool] = None
+    minor_tools_available: Optional[bool] = None
     # Client-specific extended fields
     business_type: Optional[str] = None  # Individual / Contractor / Builder / Developer / Company
     contact_person: Optional[str] = None

@@ -40,6 +40,7 @@ export const type = {
 
 export const SKILLS = [
   "AC Technician",
+  "Aluminium Window Installer",
   "CCTV Installer",
   "Carpenter",
   "Concrete Worker",
@@ -48,8 +49,8 @@ export const SKILLS = [
   "Fabrication Worker",
   "Glass Installer",
   "Gypsum Worker",
-  "Marbal Ghisai Worker",
   "Marbal Mason",
+  "Marble Polisher",
   "Mason",
   "POP Worker",
   "Painter",
@@ -57,16 +58,34 @@ export const SKILLS = [
   "Scaffolding Worker",
   "Shuttering Carpenter",
   "Steel Fixer",
+  "Texture Painter",
   "Tile Worker",
+  "UPVC Installer",
+  "Waterproofing Worker",
   "Wood Polisher",
+  "Wooden Flooring Installer",
 ];
 
 export const EXPERIENCE_LEVELS = [
-  "Full trained",
-  "Semi trained",
+  "Full Trained",
+  "Semi Trained",
   "Helper",
-  "Supervisor",
+  "Site Supervisor",
 ];
+
+// Legacy → new normalisation. Keeps historical DB values (e.g. "Supervisor",
+// "Full trained") displayable inside the new dropdown UI without a migration.
+export function normalizeExperienceLevel(v?: string | null): string {
+  if (!v) return "";
+  const s = String(v).trim();
+  if (!s) return "";
+  const lower = s.toLowerCase();
+  if (lower === "supervisor" || lower === "site supervisor") return "Site Supervisor";
+  if (lower === "full trained" || lower === "fully trained") return "Full Trained";
+  if (lower === "semi trained" || lower === "semi-trained") return "Semi Trained";
+  if (lower === "helper") return "Helper";
+  return s; // fallback: return as-is
+}
 
 export const SKILL_IMAGES: Record<string, string> = {
   Mason: "https://images.pexels.com/photos/11429199/pexels-photo-11429199.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",

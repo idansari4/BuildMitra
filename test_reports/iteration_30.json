@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 30 — Profile updates for Worker/Client/Contractor. Backend: 9/9 pytest cases PASS (new worker fields age/gender/overtime_accepted/minor_tools_available persist via PUT /api/me and are returned via GET; experience_level accepts new casings Full Trained/Semi Trained/Site Supervisor; availability-status endpoint intact; business_type + address/city/state/pin_code persist for client & contractor; existing skills/wage/city fields still save). Frontend: verified via mobile viewport (390x844) for all 3 roles — Worker profile shows Job Title & Skill Level dropdowns with correct SKILLS list (no 'Marbal Ghisai Worker'; includes Aluminium Window Installer, UPVC Installer, Wooden Flooring Installer, Waterproofing Worker, Texture Painter, Marble Polisher) and searchable modal working; experience level dropdown shows exactly Full Trained / Semi Trained / Helper / Site Supervisor; Worker Details card has two-column Wage/Experience & Age/Gender with correct testIDs; Overtime and Minor Tools yes/no rows present with testIDs. Client profile: no ID/Joined text, no Profile Completion card, Business Type dropdown lists Individual/Contractor/Builder/Developer/Company with chevron, Location order is Address→City+State (side-by-side row, city x=33-189, state x=201-357 at y=990) → PIN Code (width 180px, narrower). Mobile field is styled disabled. Contractor profile: title reads 'Contractor Information', Business Type NOT rendered (business-type-dd absent), no ID/Joined/Profile Completion, same location layout. Bottom tabs visible and hamburger menu opens Settings on all roles. All existing user data (Ramesh Kumar/Sharma Builders/Suresh Patel) intact after updates.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter30_profile_updates.py",
+    "/app/test_reports/pytest/iter30_profile_updates.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is >1600 lines — consider splitting into modules (auth, profile, jobs, erp, wallet). Not blocking this iteration.",
+    "Frontend still emits 'shadow*' deprecation warnings from React Native Web. Consider migrating to boxShadow — cosmetic, not affecting functionality."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter30_profile_updates.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None — used existing seeded demo accounts. Test writes touched worker (skills, wage, city, age, gender, flags, experience_level), client (business_type, address/city/state/pin, TEST_ prefixed company_name), contractor (TEST_ company_name, address/city/state/pin).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend URL is https://buildmitra.preview.emergentagent.com (from EXPO_PUBLIC_BACKEND_URL). All 3 role profile tabs live at /profile. Worker uses testIDs worker-job-title/worker-skill-level/wage-field/exp-field/age-field/gender-field/overtime-row(+-yes/-no)/minor-tools-row(+-yes/-no)/save-profile. Client/Contractor use testIDs business-type-dd (client only), field-company-name/field-contact-person/field-mobile/field-gst/field-address/field-city/field-state/field-pin, client-save-profile, section-company-info, section-location. Note that the worker mobile 9000000002 has status 'Currently hired on a job' from prior seed → availability toggle is auto-locked OFF — this is expected per availability rules and not a bug.",
+  "rca_of_issue": ""
+}

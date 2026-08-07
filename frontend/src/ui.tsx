@@ -37,11 +37,12 @@ export function SecondaryButton({ label, onPress, testID, style }: { label: stri
 }
 
 export function Field({
-  label, value, onChangeText, placeholder, secureTextEntry, keyboardType, testID, multiline,
-}: { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string; secureTextEntry?: boolean; keyboardType?: any; testID?: string; multiline?: boolean }) {
+  label, value, onChangeText, placeholder, secureTextEntry, keyboardType, testID, multiline, editable, autoCapitalize,
+}: { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string; secureTextEntry?: boolean; keyboardType?: any; testID?: string; multiline?: boolean; editable?: boolean; autoCapitalize?: "none" | "sentences" | "words" | "characters" }) {
   const [visible, setVisible] = React.useState(false);
   const isPassword = !!secureTextEntry;
   const hideText = isPassword && !visible;
+  const isEditable = editable !== false;
   return (
     <View style={{ marginBottom: spacing.md }}>
       <Text style={styles.label}>{label}</Text>
@@ -55,12 +56,14 @@ export function Field({
           secureTextEntry={hideText}
           keyboardType={keyboardType}
           multiline={multiline}
-          autoCapitalize={isPassword ? "none" : undefined}
+          editable={isEditable}
+          autoCapitalize={isPassword ? "none" : autoCapitalize}
           autoCorrect={isPassword ? false : undefined}
           style={[
             styles.input,
             multiline && { minHeight: 96, textAlignVertical: "top" },
             isPassword && { paddingRight: 44 },
+            !isEditable && styles.inputDisabled,
           ]}
         />
         {isPassword ? (
@@ -130,6 +133,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border, borderRadius: radius.md,
     paddingHorizontal: 14, paddingVertical: 14, fontSize: type.base,
     color: colors.onSurface, backgroundColor: colors.surface,
+    minHeight: 50,
+  },
+  inputDisabled: {
+    backgroundColor: colors.surfaceSecondary,
+    color: colors.onSurfaceSecondary,
   },
   eyeBtn: {
     position: "absolute", right: 10, top: 0, bottom: 0,

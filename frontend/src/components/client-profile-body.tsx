@@ -3,7 +3,8 @@ import { View, StyleSheet, Pressable, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
 import { colors, radius, spacing, type as t } from "@/src/theme";
-import { Body, Muted, Card, Field, PrimaryButton, Chip } from "@/src/ui";
+import { Body, Card, Field, PrimaryButton } from "@/src/ui";
+import Dropdown from "@/src/components/dropdown";
 
 /* ------------------------------------------------------------
    Client Profile Body — used in profile.tsx for role=client (and contractor).
@@ -103,28 +104,6 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
 
   return (
     <View style={{ gap: spacing.md }}>
-      {/* Profile Completion */}
-      {stats && stats.completion_pct < 100 ? (
-        <Card testID="client-completion-card" style={{ borderWidth: 1, borderColor: colors.brand + "44" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Ionicons name="rocket" size={18} color={colors.brand} />
-              <Body style={{ fontWeight: "800" }}>Profile Completion</Body>
-            </View>
-            <Body style={{ fontWeight: "800", color: colors.brand }}>{stats.completion_pct}%</Body>
-          </View>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressBar, { width: `${stats.completion_pct}%` }]} />
-          </View>
-          {stats.missing_fields.length > 0 ? (
-            <Muted style={{ fontSize: 11, marginTop: 8 }}>
-              Complete: {stats.missing_fields.slice(0, 4).join(", ")}
-              {stats.missing_fields.length > 4 ? `, +${stats.missing_fields.length - 4} more` : ""}
-            </Muted>
-          ) : null}
-        </Card>
-      ) : null}
-
       {/* Badges strip */}
       {stats && stats.badges.length > 0 ? (
         <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }} testID="client-badges">
@@ -151,32 +130,60 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
       >
         <Field label="Business Name" value={companyName} onChangeText={setCompanyName} placeholder="e.g., ABC Construction" testID="field-company-name" />
         {isContractor ? null : (
-          <>
-            <Body style={{ fontWeight: "700", marginTop: 4, fontSize: 13 }}>Business Type</Body>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8, marginBottom: 12 }}>
-              {BUSINESS_TYPES.map((b) => (
-                <Chip
-                  key={b}
-                  testID={`bt-${b}`}
-                  label={b}
-                  selected={businessType === b}
-                  onPress={() => setBusinessType(businessType === b ? "" : b)}
-                />
-              ))}
-            </View>
-          </>
+          <Dropdown
+            testID="business-type-dd"
+            label="Business Type"
+            value={businessType}
+            options={BUSINESS_TYPES}
+            onSelect={setBusinessType}
+            placeholder="Select business type"
+          />
         )}
         <Field label="Contact Person" value={contactPerson} onChangeText={setContactPerson} placeholder="Name" testID="field-contact-person" />
-        <Field label="Mobile" value={user?.mobile || ""} editable={false} testID="field-mobile" />
+        <Field label="Mobile" value={user?.mobile || ""} onChangeText={() => {}} editable={false} testID="field-mobile" />
         <Field label="GST Number (Optional)" value={gst} onChangeText={setGst} placeholder="e.g., 27ABCDE1234F1Z5" autoCapitalize="characters" testID="field-gst" />
       </SectionCard>
 
-      {/* Location */}
+      {/* Location — order: Address → City → State → PIN */}
       <SectionCard icon="location" title="Location" testID="section-location">
-        <Field label="State" value={stateVal} onChangeText={setStateVal} placeholder="Maharashtra" testID="field-state" />
-        <Field label="City" value={city} onChangeText={setCity} placeholder="Mumbai" testID="field-city" />
-        <Field label="Complete Address" value={address} onChangeText={setAddress} placeholder="Office / Site address" testID="field-address" />
-        <Field label="PIN Code" value={pin} onChangeText={setPin} keyboardType="number-pad" placeholder="400001" testID="field-pin" />
+        <Field
+          label="Complete Address"
+          value={address}
+          onChangeText={setAddress}
+          placeholder="Office / Site address"
+          testID="field-address"
+          multiline
+        />
+        <View style={styles.twoCol}>
+          <View style={styles.col}>
+            <Field
+              label="City"
+              value={city}
+              onChangeText={setCity}
+              placeholder="Mumbai"
+              testID="field-city"
+            />
+          </View>
+          <View style={styles.col}>
+            <Field
+              label="State"
+              value={stateVal}
+              onChangeText={setStateVal}
+              placeholder="Maharashtra"
+              testID="field-state"
+            />
+          </View>
+        </View>
+        <View style={{ maxWidth: 180 }}>
+          <Field
+            label="PIN Code"
+            value={pin}
+            onChangeText={setPin}
+            keyboardType="number-pad"
+            placeholder="400001"
+            testID="field-pin"
+          />
+        </View>
         <Pressable testID="open-map" onPress={openMap} style={styles.mapBtn}>
           <Ionicons name="map" size={16} color={colors.brand} />
           <Body style={{ color: colors.brand, fontWeight: "700", marginLeft: 6 }}>View on Google Maps</Body>
@@ -198,9 +205,6 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
           <Pressable
             testID="edit-profile-btn"
             onPress={() => {
-              // Focus/scroll target: onNavigate hook lets parent scroll, but since fields are inline
-              // this simply toggles focus on the first field (already editable).
-              // We keep as no-op — visual clarity of "Edit Profile" alongside Save.
               onNavigate?.("#client-info");
             }}
             style={styles.editBtn}
@@ -251,6 +255,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
+  twoCol: { flexDirection: "row", gap: 12 },
+  col: { flex: 1, minWidth: 0 },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 10 },
   sectionIcon: {
     width: 30,
