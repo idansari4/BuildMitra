@@ -1,0 +1,23 @@
+{
+  "summary": "Iter 29 Profile Menu redesign fully verified. Hamburger button + bottom-sheet SettingsMenu working for CLIENT, CONTRACTOR, and WORKER. All old inline testIDs (help-support-link, my-reviews-link, notification-settings-link, change-password-link, salary-summary-link, leave-link, project-progress-link, payroll-link, logout-button) are absent from Profile screen. All 4 section containers (menu-section-account/work/support/actions) render. Role-based gating confirmed: menu-payroll only for worker; menu-notif and menu-progress hidden for worker. All route mappings verified (menu-reviews→/rating, menu-notif→/help, menu-pw→password modal, menu-leave→/leave, menu-progress→/project-progress, menu-attendance→/attendance, menu-help→/help, menu-privacy→/legal/privacy, menu-terms→/legal/terms, menu-payroll→/salary-summary, menu-edit closes sheet & stays on profile, menu-logout→/role-select). menu-close X and menu-backdrop both close the sheet. Regression: chat-link, lang-en, lang-hi chips still present and chat-link navigates to /chat-list. Privacy Policy and Terms pages render with back-button testID.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["Playwright inline script executed against https://buildmitra.preview.emergentagent.com"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: onPayroll in profile.tsx uses inline ternary with as-cast: router.push(user?.role === 'worker' ? '/salary-summary' : '/payroll' as any) — the `as any` is only applied to the '/payroll' string, not the full ternary. Works because router.push accepts string, but for cleanliness use router.push((user?.role === 'worker' ? '/salary-summary' : '/payroll') as any).",
+    "Section titles in settings-menu.tsx use CSS textTransform: uppercase — actual DOM text preserves original case ('Account', 'Work Management', etc.) which is correct; visually renders uppercase. No fix needed, just documenting for future testing agents to use case-insensitive matching."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "seed_data_creation": "None — used existing demo accounts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "SettingsMenu bottom sheet is fully role-aware and stable. All 11 menu testIDs, 4 section containers, menu-close, and menu-backdrop work correctly. Login fields (Field component) expose testID directly on the <input>, so use selector like [data-testid=\"login-mobile\"] NOT [data-testid=\"login-mobile\"] input. When matching section headers by text remember they are visually uppercased via CSS; use case-insensitive check or match by testID.",
+  "rca_of_issue": "N/A — no bugs found."
+}

@@ -8,8 +8,9 @@ import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
 import { colors, radius, spacing, SKILLS, EXPERIENCE_LEVELS, type as t } from "@/src/theme";
-import { H1, H2, Body, Muted, Card, Chip, PrimaryButton, Field, SecondaryButton } from "@/src/ui";
+import { H1, H2, Body, Muted, Card, Chip, PrimaryButton, Field } from "@/src/ui";
 import ClientProfileBody from "@/src/components/client-profile-body";
+import SettingsMenu from "@/src/components/settings-menu";
 
 export default function Profile() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function Profile() {
 
   // Password change modal state
   const [pwModal, setPwModal] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [oldPw, setOldPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -240,6 +242,13 @@ export default function Profile() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 100, gap: spacing.md }}>
+        {/* Top-right hamburger menu */}
+        <View style={styles.topBar}>
+          <View style={{ flex: 1 }} />
+          <Pressable testID="hamburger-menu" onPress={() => setMenuOpen(true)} style={styles.hamburgerBtn}>
+            <Ionicons name="menu" size={26} color={colors.onSurface} />
+          </Pressable>
+        </View>
         <View style={styles.head}>
           <Pressable testID="avatar-edit" onPress={onAvatarPress} style={styles.avatarWrap} disabled={photoBusy}>
             {photo ? (
@@ -441,90 +450,6 @@ export default function Profile() {
           <PrimaryButton testID="save-profile" label={tr("profile.save")} icon="checkmark-circle-outline" loading={busy} onPress={save} />
         ) : null}
 
-        <H2 style={{ marginTop: spacing.md }}>{tr("profile.settings")}</H2>
-
-        <Pressable testID="help-support-link" onPress={() => router.push("/help" as any)} style={styles.payrollLink}>
-          <Ionicons name="help-buoy" size={22} color={colors.brand} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Body style={{ fontWeight: "700" }}>{tr("complaints.helpSupport")}</Body>
-            <Muted style={{ fontSize: 11 }}>{tr("complaints.helpSub")}</Muted>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
-        </Pressable>
-
-        {(user?.role === "client" || user?.role === "contractor") && (
-          <>
-            <Pressable testID="my-reviews-link" onPress={() => router.push("/rating" as any)} style={styles.payrollLink}>
-              <Ionicons name="star" size={22} color={colors.brand} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Body style={{ fontWeight: "700" }}>My Reviews</Body>
-                <Muted style={{ fontSize: 11 }}>See what workers say</Muted>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
-            </Pressable>
-            <Pressable testID="notification-settings-link" onPress={() => router.push("/help" as any)} style={styles.payrollLink}>
-              <Ionicons name="notifications" size={22} color={colors.brand} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Body style={{ fontWeight: "700" }}>Notification Settings</Body>
-                <Muted style={{ fontSize: 11 }}>Push, email preferences</Muted>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
-            </Pressable>
-          </>
-        )}
-
-        <Pressable testID="change-password-link" onPress={() => setPwModal(true)} style={styles.payrollLink}>
-          <Ionicons name="key" size={22} color={colors.brand} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Body style={{ fontWeight: "700" }}>{tr("profile.changePassword")}</Body>
-            <Muted style={{ fontSize: 11 }}>Update your account password</Muted>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
-        </Pressable>
-
-        {user?.role === "worker" && (
-          <Pressable testID="salary-summary-link" onPress={() => router.push("/salary-summary" as any)} style={styles.payrollLink}>
-            <Ionicons name="cash" size={22} color={colors.brand} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Body style={{ fontWeight: "700" }}>Salary Summary</Body>
-              <Muted style={{ fontSize: 11 }}>Monthly earnings & attendance</Muted>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
-          </Pressable>
-        )}
-
-        {(user?.role === "worker" || user?.role === "contractor" || user?.role === "client" || user?.role === "admin") && (
-          <Pressable testID="leave-link" onPress={() => router.push("/leave" as any)} style={styles.payrollLink}>
-            <Ionicons name="calendar" size={22} color={colors.brand} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Body style={{ fontWeight: "700" }}>Leave Management</Body>
-              <Muted style={{ fontSize: 11 }}>{user?.role === "worker" ? "Request leave" : "Approve worker leave"}</Muted>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
-          </Pressable>
-        )}
-
-        {(user?.role === "contractor" || user?.role === "client") && (
-          <Pressable testID="project-progress-link" onPress={() => router.push("/project-progress" as any)} style={styles.payrollLink}>
-            <Ionicons name="bar-chart" size={22} color={colors.brand} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Body style={{ fontWeight: "700" }}>Project Progress</Body>
-              <Muted style={{ fontSize: 11 }}>Track hiring, days, escrow across jobs</Muted>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
-          </Pressable>
-        )}
-
-        {(user?.role === "contractor" || user?.role === "client") && (
-          <Pressable testID="payroll-link" onPress={() => router.push("/payroll" as any)} style={styles.payrollLink}>
-            <Ionicons name="cash" size={22} color={colors.brand} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Body style={{ fontWeight: "700" }}>Payroll</Body>
-              <Muted style={{ fontSize: 11 }}>Monthly wages by attendance</Muted>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.borderStrong} />
-          </Pressable>
-        )}
         <Pressable testID="chat-link" onPress={() => router.push("/chat-list" as any)} style={styles.payrollLink}>
           <Ionicons name="chatbubbles" size={22} color={colors.brand} />
           <View style={{ flex: 1, marginLeft: 12 }}>
@@ -553,8 +478,26 @@ export default function Profile() {
           )}
           <Row icon="call" label={tr("profile.whatsapp")} value="+91 90000 00000" />
         </Card>
-        <SecondaryButton testID="logout-button" label={tr("common.logout")} onPress={onLogout} />
       </ScrollView>
+
+      {/* Settings Menu bottom sheet */}
+      <SettingsMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        role={(user?.role as any) || "worker"}
+        onEditProfile={() => { /* fields are inline editable — closing sheet is enough */ }}
+        onMyReviews={() => router.push("/rating" as any)}
+        onNotificationSettings={() => router.push("/help" as any)}
+        onChangePassword={() => setPwModal(true)}
+        onLeaveManagement={() => router.push("/leave" as any)}
+        onProjectProgress={() => router.push("/project-progress" as any)}
+        onPayroll={() => router.push(user?.role === "worker" ? "/salary-summary" : "/payroll" as any)}
+        onAttendance={() => router.push("/(tabs)/attendance" as any)}
+        onHelpSupport={() => router.push("/help" as any)}
+        onPrivacyPolicy={() => router.push("/legal/privacy" as any)}
+        onTerms={() => router.push("/legal/terms" as any)}
+        onLogout={onLogout}
+      />
 
       {/* Aadhaar Modal */}
       <Modal visible={aadhaarModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAadhaarModal(false)}>
@@ -702,6 +645,22 @@ const styles = StyleSheet.create({
   testHint: { flexDirection: "row", alignItems: "center", marginTop: 8, padding: 10, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   modalCta: { padding: spacing.md, paddingBottom: spacing.xl, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
   payrollLink: { flexDirection: "row", alignItems: "center", padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, marginBottom: 8 },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: -8,
+  },
+  hamburgerBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   availIcon: {
     width: 44,
     height: 44,
