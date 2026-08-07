@@ -7,9 +7,10 @@ import { Body, Muted, Card, H2, Field, PrimaryButton, Chip } from "@/src/ui";
 
 /* ------------------------------------------------------------
    Client Profile Body — used in profile.tsx for role=client (and contractor).
-   Renders: hero, company info, location, stats, verification, payments,
-   ratings, documents, quick actions.
-   Keeps existing worker code untouched.
+   Simplified layout (iter 26):
+   Header → Completion → Badges → Client Information → Location
+   → Save + Edit action row → Setting section (My Reviews, Notifications)
+   Worker code kept untouched in profile.tsx.
 ------------------------------------------------------------ */
 
 const BUSINESS_TYPES = ["Individual", "Contractor", "Builder", "Developer", "Company"];
