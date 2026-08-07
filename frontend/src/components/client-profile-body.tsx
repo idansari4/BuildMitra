@@ -44,7 +44,7 @@ type Props = {
   onNavigate?: (route: string) => void;
 };
 
-export default function ClientProfileBody({ user, onSaved, onNavigate: _onNavigate }: Props) {
+export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) {
   const isContractor = user?.role === "contractor";
   const [stats, setStats] = useState<ClientStats | null>(null);
   const [companyName, setCompanyName] = useState(user?.company_name || user?.name || "");
