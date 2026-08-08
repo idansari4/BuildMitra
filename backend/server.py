@@ -242,6 +242,9 @@ class JobIn(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     geofence_radius_m: Optional[int] = 200  # geofence radius in meters
+    # New categorisation fields (v30+)
+    site_project_type: Optional[str] = None  # Residential / Commercial
+    worker_skill_level: Optional[str] = None  # Full Trained / Semi Trained / Helper / Site Supervisor
 
 class ApplyIn(BaseModel):
     job_id: str

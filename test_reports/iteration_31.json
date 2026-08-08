@@ -1,0 +1,28 @@
+{
+  "summary": "Iter31 — Redesigned 'Post a Job' page + backend new fields (site_project_type, worker_skill_level). Backend: 5/5 pytest tests PASSED (client & contractor post with new fields, backward-compat without new fields, worker 403, list-jobs regression). Frontend: Full end-to-end verified on mobile viewport (390x844) for both Client (9000000001) and Contractor (9000000003). All 15 required testIDs present on Post page. Validation errors 'Please select Site / Project Type' and 'Please select Worker Category' render correctly. Worker Category searchable dropdown contains SKILLS from theme.ts (verified: Aluminium Window Installer, UPVC Installer, Marble Polisher present; Marbal Ghisai Worker absent). Skill Level dropdown lists all 4 EXPERIENCE_LEVELS (Full Trained, Semi Trained, Helper, Site Supervisor). Successful submit shows 'Job posted ✓' and navigates to /(tabs)/activity for both roles. Newly-posted jobs visible on My Jobs with UPVC Installer / Aluminium Window Installer skill labels. No regressions to seeded jobs listing.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_post_job_iter31.py",
+    "/app/test_reports/pytest/iter31_post_job.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "post.tsx passes `worker_skill_level: skillLevel || null` — backend accepts Optional[str]; works correctly. Consider omitting the key instead of sending null for cleaner payloads (cosmetic).",
+    "Field validation order: title/description/location checked before site_type; ordering matches expected UX and validation strings match spec exactly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_post_job_iter31.py (new)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (all required flows)"},
+  "seed_data_creation": "Tests created TEST_-prefixed jobs via API (Client + Contractor). No user seeding needed; used existing demo accounts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Post-a-Job redesign fully verified. Backend model JobIn accepts site_project_type + worker_skill_level as Optional. Frontend uses SKILLS from src/theme.ts (25 items) for Worker Category dropdown and EXPERIENCE_LEVELS for skill level. Public URL: EXPO_PUBLIC_BACKEND_URL=https://buildmitra.preview.emergentagent.com. Login flow: /role-select → pick role → Continue → /login → enter mobile+password → Login button (testID login-submit).",
+  "rca_of_issue": "N/A — no issues found."
+}
