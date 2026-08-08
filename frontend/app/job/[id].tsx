@@ -152,6 +152,22 @@ export default function JobDetail() {
           <Stat label="Duration" value={`${job.duration_days}d`} />
         </View>
 
+        {job.working_duration ? (
+          <Card testID="job-working-duration">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="time" size={20} color={colors.brand} />
+              <View style={{ flex: 1 }}>
+                <Muted style={{ fontSize: 12, fontWeight: "700" }}>
+                  Working Duration
+                </Muted>
+                <Body style={{ fontWeight: "800", marginTop: 2 }}>
+                  {String(job.working_duration).replace(/^Custom:\s*/, "")}
+                </Body>
+              </View>
+            </View>
+          </Card>
+        ) : null}
+
         <Card>
           <Body style={{ fontWeight: "700" }}>About the work</Body>
           <Body style={{ marginTop: 8, lineHeight: 22 }}>{job.description}</Body>

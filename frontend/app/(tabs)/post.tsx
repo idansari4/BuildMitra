@@ -38,6 +38,20 @@ const WORKER_TYPES: { key: "daily_worker" | "contractor"; label: string; icon: a
   { key: "contractor", label: "Contractor", icon: "briefcase", sub: "Contract-based work" },
 ];
 
+const WORKING_DURATIONS = [
+  "1 Day",
+  "2-3 Days",
+  "4-7 Days",
+  "1-2 Weeks",
+  "2-4 Weeks",
+  "1-3 Months",
+  "3-6 Months",
+  "6+ Months",
+  "Long Term",
+  "To Be Decided",
+  "Custom Duration",
+];
+
 const SKILL_CATEGORIES = ["Full Trained", "Semi Trained", "Helper", "Site Supervisor"] as const;
 type SkillCategory = (typeof SKILL_CATEGORIES)[number];
 
@@ -59,6 +73,8 @@ export default function PostJob() {
   const [jobTitle, setJobTitle] = useState<string>("");
   const [description, setDescription] = useState("");
   const [workingStartDate, setWorkingStartDate] = useState("");
+  const [workingDuration, setWorkingDuration] = useState<string>("");
+  const [customDuration, setCustomDuration] = useState<string>("");
   const [drawing, setDrawing] = useState<Drawing>(null);
 
   // Daily-wages-worker only
@@ -211,6 +227,14 @@ export default function PostJob() {
       setErr("Please pick a Working Start Date");
       return;
     }
+    if (!workingDuration) {
+      setErr("Please select Working Duration");
+      return;
+    }
+    if (workingDuration === "Custom Duration" && !customDuration.trim()) {
+      setErr("Please enter your custom working duration");
+      return;
+    }
     if (!address.trim() || !city.trim() || !state.trim() || !pin.trim()) {
       setErr("Please fill complete site location (address, city, state, PIN)");
       return;
@@ -237,6 +261,10 @@ export default function PostJob() {
     setBusy(true);
     try {
       const composedLocation = [address, city, state].filter(Boolean).join(", ");
+      const finalDuration =
+        workingDuration === "Custom Duration"
+          ? `Custom: ${customDuration.trim()}`
+          : workingDuration;
       const payload: any = {
         title: jobTitle,
         description: description.trim(),
@@ -251,6 +279,7 @@ export default function PostJob() {
         site_project_type: siteType,
         worker_type: workerType,
         working_start_date: workingStartDate,
+        working_duration: finalDuration,
         address,
         city,
         state,
@@ -279,6 +308,8 @@ export default function PostJob() {
       setJobTitle("");
       setDescription("");
       setWorkingStartDate("");
+      setWorkingDuration("");
+      setCustomDuration("");
       setDrawing(null);
       setSkillRows([]);
       setSiteStay(null);
@@ -483,6 +514,28 @@ export default function PostJob() {
                 required
                 minDate={new Date()}
               />
+
+              {/* Working Duration */}
+              <Dropdown
+                testID="working-duration"
+                label="Working Duration *"
+                value={workingDuration}
+                options={WORKING_DURATIONS}
+                onSelect={(v) => {
+                  setWorkingDuration(v);
+                  if (v !== "Custom Duration") setCustomDuration("");
+                }}
+                placeholder="How long will this work last?"
+              />
+              {workingDuration === "Custom Duration" ? (
+                <Field
+                  testID="custom-duration-input"
+                  label="Custom Duration *"
+                  value={customDuration}
+                  onChangeText={setCustomDuration}
+                  placeholder="e.g., 45 Days, 10 Weeks, Ongoing till Diwali"
+                />
+              ) : null}
 
               {/* Upload Drawing */}
               <SectionCard title="Upload Drawing (Optional)" icon="document-attach" testID="section-drawing">

@@ -257,6 +257,7 @@ class JobIn(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     pin_code: Optional[str] = None
+    working_duration: Optional[str] = None  # e.g. "2-4 Weeks", "Long Term", "Custom: 45 Days"
 
 class ApplyIn(BaseModel):
     job_id: str

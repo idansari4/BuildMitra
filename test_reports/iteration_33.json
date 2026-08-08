@@ -1,0 +1,31 @@
+{
+  "summary": "Iter33 — Working Duration field on Post Job verified end-to-end. Backend: 3/3 pytest tests PASSED — (a) POST /api/jobs with working_duration='2-4 Weeks' → 200 and persisted via GET; (b) POST with working_duration='Custom: 45 Days' → 200 and persisted; (c) POST without working_duration → still 200 (Optional field, backward compatible). Frontend (mobile 390x844, client 9000000001 + worker 9000000002): dropdown testID `working-duration` renders immediately below `working-start-date` (positions 14→19 in DOM order); all 11 required options present (1 Day, 2-3 Days, 4-7 Days, 1-2 Weeks, 2-4 Weeks, 1-3 Months, 3-6 Months, 6+ Months, Long Term, To Be Decided, Custom Duration). Selecting 'Custom Duration' reveals `custom-duration-input` field. Validation OK: empty duration → 'Please select Working Duration'; Custom selected with empty text → 'Please enter your custom working duration'. Full submit with 'Custom Duration' + '45 Days' → 'Job posted ✓' and navigation to /activity; job appears in My Jobs list. Backend received working_duration='Custom: 45 Days'. Worker view: `job-working-duration` card renders with 'Working Duration' label and value; Custom prefix is correctly stripped ('45 Days' displayed, not 'Custom: 45 Days'). Standard duration 'Custom' job shows '45 Days'; job with '2-4 Weeks' shows '2-4 Weeks'. Old jobs (working_duration=None): card is NOT rendered, page renders normally with job title/hero/apply button intact. No regressions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_working_duration_iter33.py",
+    "/app/test_reports/pytest/iter33_working_duration.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "post.tsx: Custom duration composition uses `Custom: ${customDuration.trim()}` — matches spec and display strip regex `/^Custom:\\s*/` on job/[id].tsx. Round-trip safe.",
+    "post.tsx validation ordering places Working Duration check after Working Start Date and before location — matches UX flow.",
+    "job/[id].tsx conditionally renders the Working Duration card only when `job.working_duration` is truthy — old jobs render cleanly with no error.",
+    "Backend JobIn.working_duration is Optional[str]=None — safe backward compatibility; no default coercion needed.",
+    "Minor: no server-side length cap on working_duration string (custom value could theoretically be very long). Not required for MVP but a light validator (e.g., max_length=100) could be added later."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_working_duration_iter33.py (new)"
+  ],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% (dropdown position + options + validation + custom flow + display strip + old-job compat)"},
+  "seed_data_creation": "3 TEST_-prefixed jobs created via pytest (TEST_WD_Standard, TEST_WD_Custom, TEST_WD_Legacy) + 1 UI-submitted 'Mason' job with working_duration='Custom: 45 Days'. Left in DB. Cleanup: db.jobs.deleteMany({title: /^TEST_WD/}).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Working Duration field is stable. Backend accepts working_duration Optional[str] on POST /api/jobs; frontend post.tsx uses Dropdown component (testID `working-duration`) with 11 options; Custom reveals Field testID `custom-duration-input` and stores as `Custom: <text>`. Display on job/[id].tsx uses testID `job-working-duration` and strips `Custom:` prefix. Public URL: https://buildmitra.preview.emergentagent.com.",
+  "rca_of_issue": "N/A — feature working as specified."
+}
