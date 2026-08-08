@@ -7,7 +7,7 @@ import logging
 import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 import uuid
 import bcrypt
@@ -232,7 +232,7 @@ class JobIn(BaseModel):
     description: str
     skill: str
     workers_needed: int = 1
-    daily_wage: int
+    daily_wage: int = 0
     location: str
     site_address: Optional[str] = ""
     start_date: Optional[str] = None
@@ -243,8 +243,20 @@ class JobIn(BaseModel):
     lng: Optional[float] = None
     geofence_radius_m: Optional[int] = 200  # geofence radius in meters
     # New categorisation fields (v30+)
-    site_project_type: Optional[str] = None  # Residential / Commercial
+    site_project_type: Optional[str] = None  # residential / commercial
     worker_skill_level: Optional[str] = None  # Full Trained / Semi Trained / Helper / Site Supervisor
+    # v31 additions — daily-wages-worker vs contractor form
+    worker_type: Optional[str] = None  # daily_worker / contractor
+    skills_required: Optional[List[Dict[str, Any]]] = None  # [{skill: "Full Trained", count: 3}, ...]
+    working_start_date: Optional[str] = None  # ISO date "YYYY-MM-DD"
+    drawing_url: Optional[str] = None  # base64 data URL (image/pdf)
+    drawing_type: Optional[str] = None  # "image" | "pdf"
+    drawing_name: Optional[str] = None  # original file name (optional)
+    site_stay_allowed: Optional[bool] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pin_code: Optional[str] = None
 
 class ApplyIn(BaseModel):
     job_id: str

@@ -1,0 +1,34 @@
+{
+  "summary": "Iter32 — Redesigned 'Post a Job' v31 (daily_worker vs contractor split + skills_required + site_stay + address fields). Backend: 6/6 pytest tests PASSED covering (a) Client posting full Daily Worker payload with skills_required=[{Full Trained,2},{Helper,3}], site_stay_allowed=true, address/city/state/pin_code, lat/lng, and verifying persistence via GET /api/jobs/{id}; (b) Client posting Contractor payload without skills_required/site_stay_allowed (200, daily_wage defaults to 0); (c) Backward-compat post with only title/description/skill/location succeeds (200); (d) Worker (9000000002) posting is correctly 403; (e) GET /api/jobs regression returns list including newly posted jobs; (f) Contractor role (9000000003) can also post. Frontend: end-to-end verified on mobile viewport 390x844 for Client (9000000001). All 16 required testIDs present: site-type-residential, site-type-commercial, worker-type-daily_worker, worker-type-contractor, job-title-dd, skill-cat-full-trained, skill-cat-semi-trained, skill-cat-helper, skill-cat-site-supervisor, sk-inc-full-trained, sk-dec-full-trained, desc-input, working-start-date, drawing-upload, site-stay-yes, site-stay-no, address-input, city-input, state-input, pin-input, capture-gps, post-job-submit. Before Worker Type selection: only Site Type + Worker Type cards + helper 'Select a Worker Type to continue.' visible; post-job-submit is HIDDEN (count=0). Selecting Daily Wages Worker reveals full form; NO wage input rendered (the 'Daily Wage' substring hit came from the 'Daily Wages Worker' card label — not a real field). Contractor mode correctly hides Skills Required + Site Stay while keeping Job Title/Description/Start Date/Drawing/Location. Validation: submitting empty on Daily Worker → 'Please select a Job Title' shown. Full flow: filled Mason as Job Title, Tomorrow via quick chip, Full Trained skill, Site Stay Yes, address/city/state/pin → 'Job posted ✓' rendered and router replaced to /(tabs)/activity — new job appeared in Home/My Jobs list. Worker (9000000002) → /post shows 'Not available — Only Client & Contractor accounts can post jobs.'",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* deprecation", "issue": "Console warns 'shadow* style props are deprecated. Use boxShadow.' — pre-existing across the app (not introduced by post.tsx). Non-blocking. Reference: various styles across /app/frontend/src/**"},
+      {"component": "props.pointerEvents deprecation", "issue": "Console warns 'props.pointerEvents is deprecated. Use style.pointerEvents' — pre-existing library warning (react-native-web). Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_post_job_iter32.py",
+    "/app/test_reports/pytest/iter32_post_job.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "post.tsx (635 lines) is close to the 700-line soft cap. Sub-components (SectionCard, SegmentBtn) and SKILL_CATEGORIES constant are well-scoped; further splitting is optional.",
+    "post.tsx sends both `skill: jobTitle` and `title: jobTitle` — good backward compat with legacy JobIn.skill filter used by /api/jobs and /api/jobs/search.",
+    "Validation ordering in submit() checks siteType → workerType → jobTitle → description → workingStartDate → address → dailyWorker-specific (skills, siteStay). Matches spec.",
+    "DatePickerField uses HTML `<input type=\"date\">` on web via react-native-web escape hatch — quick chips (Today/Tomorrow/+3/+1w) work and set ISO YYYY-MM-DD. testID `working-start-date-quick-{offset}` is exposed for automation.",
+    "drawing_url is stored as base64 data URL — could be very large for high-res photos; consider a server-side size limit similar to MAX_PHOTO_B64_LEN (already exists for profile photos)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_post_job_iter32.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (all required flows + validation + worker gate)"},
+  "seed_data_creation": "Tests inserted TEST_-prefixed jobs (TEST_Full Trained Mason, TEST_Plumber, TEST_Legacy Job, TEST_Contractor_Post) plus one UI-submitted job (Mason, TEST Bandra East, Mumbai). Left in DB for main-agent verification; can be cleaned via db.jobs.deleteMany({title: /^TEST/}) if desired.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Post-Job v31 fully verified. Backend JobIn accepts site_project_type, worker_type, skills_required[], working_start_date, drawing_url/type/name, site_stay_allowed, address/city/state/pin_code — all Optional. daily_wage now defaults to 0. Frontend post.tsx uses SKILLS from theme for Job Title dropdown; skill categories are 4 fixed cards (Full Trained/Semi Trained/Helper/Site Supervisor). Public URL: https://buildmitra.preview.emergentagent.com. Login: /login → login-mobile + login-password + login-submit.",
+  "rca_of_issue": "N/A — feature is functioning correctly end-to-end."
+}
