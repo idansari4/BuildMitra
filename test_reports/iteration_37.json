@@ -1,0 +1,29 @@
+{
+  "summary": "Phase 3 Worker & Contractor profile enhancements verified end-to-end. Backend PUT /me accepts all new fields (working_hours_*, conveyance_allowance, permanent_*, aadhaar_document_*) and correctly enforces safety: any payload containing aadhaar_document_url forces aadhaar_status='pending' and clears aadhaar_rejection_reason; a payload sending aadhaar_status='verified' WITHOUT a new document is silently ignored (status stays 'pending'). Contractor+Client also accept permanent_* fields (backward-compatible). Frontend: Worker Profile shows Working Hours row (working-hours-start/-end as <input type=time>), Conveyance Yes/No row, Permanent Address card, and Identity Verification card with a functional bottom-sheet chooser. Values persist across page reload. Contractor Profile shows Permanent Address + perm-save-btn + Identity Verification (values persist after Save Permanent Address). Client Profile correctly excludes all three cards. 8/8 backend tests pass; 3/3 frontend role checks pass. No critical issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter37_phase3_profile.py",
+    "/app/test_reports/pytest/iter37_phase3.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "profile.tsx is now 1311 lines — consider splitting Worker/Contractor/Client bodies into separate files for maintainability (non-blocking).",
+    "TimePickerField parses '9:00 AM' but HOURS list contains duplicated 6/7/8/9/10/11 entries (visual duplication in native modal, harmless on web where HTML5 picker is used)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all testIDs verified, persistence confirmed for Worker+Contractor, exclusion confirmed for Client)"},
+  "seed_data_creation": "Test data written to real demo Worker (9000000002) and Contractor (9000000003) profiles (permanent address 'Vill Sohna UI'/Patna and 'TEST_Contractor Addr'/Gurgaon). Aadhaar document (tiny data-URL stub) uploaded to demo Worker+Contractor with aadhaar_status='pending' — safe to leave; admin can clear later.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend PUT /me now silently rewrites aadhaar_status to 'pending' whenever aadhaar_document_url is present, and ignores client-supplied aadhaar_status when no document is uploaded (users cannot self-verify). Permanent address fields are accepted for all roles (Client too). Frontend testIDs: working-hours-start, working-hours-end, conveyance-row-yes/-no, perm-address, perm-city, perm-state, perm-pin, perm-country, aadhaar-upload-btn (Worker & Contractor), perm-save-btn (Contractor-only), aadhaar-choose-image/-pdf/-cancel (bottom sheet). Client role does NOT render these cards.",
+  "rca_of_issue": "N/A — all requested tests passed."
+}

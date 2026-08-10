@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Image, Alert, ActionSheetIOS, Switch } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Image, Alert, ActionSheetIOS, Switch, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -12,6 +12,7 @@ import { H1, H2, Body, Muted, Card, Chip, PrimaryButton, Field } from "@/src/ui"
 import ClientProfileBody from "@/src/components/client-profile-body";
 import SettingsMenu from "@/src/components/settings-menu";
 import Dropdown from "@/src/components/dropdown";
+import TimePickerField from "@/src/components/time-picker-field";
 import { formatMonthShort } from "@/src/utils/date";
 
 export default function Profile() {
@@ -52,6 +53,27 @@ export default function Profile() {
       ? (user as any).minor_tools_available
       : null
   );
+  // v33+ Working hours & conveyance allowance
+  const [workingHoursStart, setWorkingHoursStart] = useState<string>(
+    (user as any)?.working_hours_start || ""
+  );
+  const [workingHoursEnd, setWorkingHoursEnd] = useState<string>(
+    (user as any)?.working_hours_end || ""
+  );
+  const [conveyanceAllowance, setConveyanceAllowance] = useState<boolean | null>(
+    typeof (user as any)?.conveyance_allowance === "boolean"
+      ? (user as any).conveyance_allowance
+      : null
+  );
+  // v33+ Permanent address
+  const [permAddress, setPermAddress] = useState<string>((user as any)?.permanent_address || "");
+  const [permCity, setPermCity] = useState<string>((user as any)?.permanent_city || "");
+  const [permState, setPermState] = useState<string>((user as any)?.permanent_state || "");
+  const [permPin, setPermPin] = useState<string>((user as any)?.permanent_pin_code || "");
+  const [permCountry, setPermCountry] = useState<string>((user as any)?.permanent_country || "India");
+  // v33+ Aadhaar upload
+  const [aadhaarDocBusy, setAadhaarDocBusy] = useState(false);
+  const [aadhaarPickerOpen, setAadhaarPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [aadhaarModal, setAadhaarModal] = useState(false);
@@ -191,6 +213,18 @@ export default function Profile() {
         payload.gender = gender || null;
         if (overtimeAccepted !== null) payload.overtime_accepted = overtimeAccepted;
         if (minorToolsAvailable !== null) payload.minor_tools_available = minorToolsAvailable;
+        if (conveyanceAllowance !== null) payload.conveyance_allowance = conveyanceAllowance;
+        if (workingHoursStart) payload.working_hours_start = workingHoursStart;
+        if (workingHoursEnd) payload.working_hours_end = workingHoursEnd;
+      }
+      if (isWorker || user?.role === "contractor") {
+        // Permanent address (shared between worker + contractor for KYC).
+        // Empty string clears a field intentionally.
+        payload.permanent_address = permAddress;
+        payload.permanent_city = permCity;
+        payload.permanent_state = permState;
+        payload.permanent_pin_code = permPin;
+        payload.permanent_country = permCountry;
       }
       await api.updateMe(payload);
       await refresh();
@@ -237,6 +271,61 @@ export default function Profile() {
     } catch (e: any) {
       setMsg(e?.message || tr("common.failed"));
     } finally { setPhotoBusy(false); }
+  };
+
+  const uploadAadhaarDoc = async (source: "image" | "pdf") => {
+    setAadhaarPickerOpen(false);
+    setAadhaarDocBusy(true);
+    setMsg("");
+    try {
+      if (source === "image") {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (perm.status !== "granted") {
+          setMsg("Gallery permission denied");
+          return;
+        }
+        const res = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          base64: true,
+          quality: 0.6,
+        });
+        if (res.canceled || !res.assets?.[0]?.base64) return;
+        const a = res.assets[0];
+        await api.updateMe({
+          aadhaar_document_url: `data:image/jpeg;base64,${a.base64}`,
+          aadhaar_document_type: "image",
+          aadhaar_document_name: a.fileName || "aadhaar.jpg",
+        });
+      } else {
+        const DocumentPicker = await import("expo-document-picker");
+        const res = await DocumentPicker.getDocumentAsync({
+          type: ["application/pdf"],
+          copyToCacheDirectory: true,
+          multiple: false,
+        });
+        if (res.canceled || !res.assets?.[0]) return;
+        const a = res.assets[0];
+        const nameLower = (a.name || "").toLowerCase();
+        const mimeOk = a.mimeType === "application/pdf" || nameLower.endsWith(".pdf");
+        if (!mimeOk) {
+          setMsg("Selected file is not a PDF");
+          return;
+        }
+        const FileSystem = await import("expo-file-system");
+        const b64 = await (FileSystem as any).readAsStringAsync(a.uri, { encoding: "base64" });
+        await api.updateMe({
+          aadhaar_document_url: `data:application/pdf;base64,${b64}`,
+          aadhaar_document_type: "pdf",
+          aadhaar_document_name: a.name || "aadhaar.pdf",
+        });
+      }
+      await refresh();
+      setMsg("Aadhaar document uploaded ✓ (Pending verification)");
+    } catch (e: any) {
+      setMsg(e?.message || "Failed to upload Aadhaar");
+    } finally {
+      setAadhaarDocBusy(false);
+    }
   };
 
   const onAvatarPress = () => {
@@ -532,6 +621,31 @@ export default function Profile() {
                 </View>
               </View>
 
+              {/* Working Hours */}
+              <Body style={{ fontWeight: "700", marginBottom: 6, fontSize: 13, color: colors.onSurfaceSecondary }}>
+                Working Hours <Text style={{ color: "#DC2626" }}>*</Text>
+              </Body>
+              <View style={styles.twoCol}>
+                <View style={styles.col}>
+                  <TimePickerField
+                    testID="working-hours-start"
+                    label="Start Time"
+                    value={workingHoursStart}
+                    onChange={setWorkingHoursStart}
+                    placeholder="09:00 AM"
+                  />
+                </View>
+                <View style={styles.col}>
+                  <TimePickerField
+                    testID="working-hours-end"
+                    label="End Time"
+                    value={workingHoursEnd}
+                    onChange={setWorkingHoursEnd}
+                    placeholder="05:00 PM"
+                  />
+                </View>
+              </View>
+
               {/* Overtime */}
               <YesNoRow
                 label="Overtime Accepted"
@@ -547,6 +661,14 @@ export default function Profile() {
                 onChange={setMinorToolsAvailable}
                 testID="minor-tools-row"
               />
+
+              {/* Conveyance Allowance */}
+              <YesNoRow
+                label="Conveyance Allowance"
+                value={conveyanceAllowance}
+                onChange={setConveyanceAllowance}
+                testID="conveyance-row"
+              />
             </Card>
 
             <Field
@@ -556,13 +678,186 @@ export default function Profile() {
               onChangeText={setCity}
               placeholder={tr("profile.cityPh")}
             />
+
+            {/* Permanent Address (KYC only) */}
+            <Card>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Ionicons name="home" size={18} color={colors.brand} />
+                <Body style={{ fontWeight: "800" }}>Permanent Address</Body>
+              </View>
+              <Muted style={{ fontSize: 11, marginBottom: 10 }}>
+                Used only for KYC / Aadhaar verification. Not shown publicly.
+              </Muted>
+              <Field
+                testID="perm-address"
+                label="Permanent Address"
+                value={permAddress}
+                onChangeText={setPermAddress}
+                placeholder="Village / Building, Street"
+                multiline
+              />
+              <View style={styles.twoCol}>
+                <View style={styles.col}>
+                  <Field testID="perm-city" label="City" value={permCity} onChangeText={setPermCity} placeholder="e.g., Patna" />
+                </View>
+                <View style={styles.col}>
+                  <Field testID="perm-state" label="State" value={permState} onChangeText={setPermState} placeholder="e.g., Bihar" />
+                </View>
+              </View>
+              <View style={styles.twoCol}>
+                <View style={styles.col}>
+                  <Field testID="perm-pin" label="PIN Code" value={permPin} onChangeText={setPermPin} keyboardType="number-pad" placeholder="800001" />
+                </View>
+                <View style={styles.col}>
+                  <Field testID="perm-country" label="Country" value={permCountry} onChangeText={setPermCountry} placeholder="India" />
+                </View>
+              </View>
+            </Card>
+
+            {/* Aadhaar / Identity Verification */}
+            <Card>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <Ionicons name="shield-checkmark" size={18} color={colors.brand} />
+                <Body style={{ fontWeight: "800" }}>Identity Verification</Body>
+              </View>
+              <Muted style={{ fontSize: 11, marginBottom: 12 }}>
+                Upload your Aadhaar (image or PDF). Only visible to admin & verifier.
+              </Muted>
+
+              {(user as any)?.aadhaar_document_url ? (
+                <View style={styles.aadhaarPreview}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Ionicons
+                      name={(user as any)?.aadhaar_document_type === "pdf" ? "document-text" : "image"}
+                      size={22}
+                      color={colors.brand}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Body style={{ fontWeight: "700" }} numberOfLines={1}>
+                        {(user as any)?.aadhaar_document_name || "Aadhaar document"}
+                      </Body>
+                      <AadhaarStatusPill status={(user as any)?.aadhaar_status || "pending"} />
+                    </View>
+                  </View>
+                  {(user as any)?.aadhaar_status === "rejected" && (user as any)?.aadhaar_rejection_reason ? (
+                    <Muted style={{ marginTop: 8, fontSize: 12, color: colors.error }}>
+                      Reason: {(user as any).aadhaar_rejection_reason}
+                    </Muted>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <Pressable
+                testID="aadhaar-upload-btn"
+                onPress={() => setAadhaarPickerOpen(true)}
+                disabled={aadhaarDocBusy}
+                style={({ pressed }) => [
+                  styles.aadhaarUploadBtn,
+                  pressed && { opacity: 0.85 },
+                  aadhaarDocBusy && { opacity: 0.5 },
+                ]}
+              >
+                <Ionicons name="cloud-upload" size={20} color={colors.brand} />
+                <Body style={{ color: colors.brand, fontWeight: "700", marginLeft: 8 }}>
+                  {(user as any)?.aadhaar_document_url ? "Replace Aadhaar Document" : "Upload Aadhaar Card"}
+                </Body>
+              </Pressable>
+            </Card>
           </>
         ) : user?.role === "client" || user?.role === "contractor" ? (
-          <ClientProfileBody
-            user={user}
-            onSaved={refresh}
-            onNavigate={(route) => router.push(route as any)}
-          />
+          <>
+            <ClientProfileBody
+              user={user}
+              onSaved={refresh}
+              onNavigate={(route) => router.push(route as any)}
+            />
+            {user?.role === "contractor" ? (
+              <>
+                {/* Permanent Address (KYC only) */}
+                <Card>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <Ionicons name="home" size={18} color={colors.brand} />
+                    <Body style={{ fontWeight: "800" }}>Permanent Address</Body>
+                  </View>
+                  <Muted style={{ fontSize: 11, marginBottom: 10 }}>
+                    Used only for KYC / Aadhaar verification. Not shown publicly.
+                  </Muted>
+                  <Field testID="perm-address" label="Permanent Address" value={permAddress} onChangeText={setPermAddress} placeholder="Village / Building, Street" multiline />
+                  <View style={styles.twoCol}>
+                    <View style={styles.col}>
+                      <Field testID="perm-city" label="City" value={permCity} onChangeText={setPermCity} placeholder="e.g., Patna" />
+                    </View>
+                    <View style={styles.col}>
+                      <Field testID="perm-state" label="State" value={permState} onChangeText={setPermState} placeholder="e.g., Bihar" />
+                    </View>
+                  </View>
+                  <View style={styles.twoCol}>
+                    <View style={styles.col}>
+                      <Field testID="perm-pin" label="PIN Code" value={permPin} onChangeText={setPermPin} keyboardType="number-pad" placeholder="800001" />
+                    </View>
+                    <View style={styles.col}>
+                      <Field testID="perm-country" label="Country" value={permCountry} onChangeText={setPermCountry} placeholder="India" />
+                    </View>
+                  </View>
+                  <PrimaryButton
+                    testID="perm-save-btn"
+                    label="Save Permanent Address"
+                    icon="checkmark-circle-outline"
+                    loading={busy}
+                    onPress={save}
+                  />
+                </Card>
+
+                {/* Aadhaar / Identity Verification */}
+                <Card>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <Ionicons name="shield-checkmark" size={18} color={colors.brand} />
+                    <Body style={{ fontWeight: "800" }}>Identity Verification</Body>
+                  </View>
+                  <Muted style={{ fontSize: 11, marginBottom: 12 }}>
+                    Upload your Aadhaar (image or PDF). Only visible to admin & verifier.
+                  </Muted>
+                  {(user as any)?.aadhaar_document_url ? (
+                    <View style={styles.aadhaarPreview}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <Ionicons
+                          name={(user as any)?.aadhaar_document_type === "pdf" ? "document-text" : "image"}
+                          size={22}
+                          color={colors.brand}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Body style={{ fontWeight: "700" }} numberOfLines={1}>
+                            {(user as any)?.aadhaar_document_name || "Aadhaar document"}
+                          </Body>
+                          <AadhaarStatusPill status={(user as any)?.aadhaar_status || "pending"} />
+                        </View>
+                      </View>
+                      {(user as any)?.aadhaar_status === "rejected" && (user as any)?.aadhaar_rejection_reason ? (
+                        <Muted style={{ marginTop: 8, fontSize: 12, color: colors.error }}>
+                          Reason: {(user as any).aadhaar_rejection_reason}
+                        </Muted>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  <Pressable
+                    testID="aadhaar-upload-btn"
+                    onPress={() => setAadhaarPickerOpen(true)}
+                    disabled={aadhaarDocBusy}
+                    style={({ pressed }) => [
+                      styles.aadhaarUploadBtn,
+                      pressed && { opacity: 0.85 },
+                      aadhaarDocBusy && { opacity: 0.5 },
+                    ]}
+                  >
+                    <Ionicons name="cloud-upload" size={20} color={colors.brand} />
+                    <Body style={{ color: colors.brand, fontWeight: "700", marginLeft: 8 }}>
+                      {(user as any)?.aadhaar_document_url ? "Replace Aadhaar Document" : "Upload Aadhaar Card"}
+                    </Body>
+                  </Pressable>
+                </Card>
+              </>
+            ) : null}
+          </>
         ) : (
           <>
             <Field testID="company-field" label={tr("profile.company")} value={company} onChangeText={setCompany} />
@@ -604,6 +899,55 @@ export default function Profile() {
           <Row icon="call" label={tr("profile.whatsapp")} value="+91 90000 00000" />
         </Card>
       </ScrollView>
+
+      {/* Aadhaar document source chooser */}
+      <Modal
+        visible={aadhaarPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAadhaarPickerOpen(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" }}
+          onPress={() => setAadhaarPickerOpen(false)}
+        >
+          <Pressable onPress={() => {}} style={styles.aadhaarSheet}>
+            <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 8 }} />
+            <Body style={{ fontSize: 18, fontWeight: "800", marginBottom: 12 }}>Upload Aadhaar</Body>
+            <Pressable
+              testID="aadhaar-choose-image"
+              onPress={() => uploadAadhaarDoc("image")}
+              style={{ flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginBottom: 10 }}
+            >
+              <Ionicons name="image" size={22} color={colors.brand} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Body style={{ fontWeight: "700" }}>Image (Gallery)</Body>
+                <Muted style={{ fontSize: 12 }}>JPG, PNG</Muted>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.onSurfaceSecondary} />
+            </Pressable>
+            <Pressable
+              testID="aadhaar-choose-pdf"
+              onPress={() => uploadAadhaarDoc("pdf")}
+              style={{ flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginBottom: 10 }}
+            >
+              <Ionicons name="document-text" size={22} color={colors.brand} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Body style={{ fontWeight: "700" }}>PDF Document</Body>
+                <Muted style={{ fontSize: 12 }}>From Downloads / Files</Muted>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.onSurfaceSecondary} />
+            </Pressable>
+            <Pressable
+              testID="aadhaar-choose-cancel"
+              onPress={() => setAadhaarPickerOpen(false)}
+              style={{ padding: 14, borderRadius: 10, backgroundColor: colors.surfaceSecondary, alignItems: "center", marginTop: 4 }}
+            >
+              <Body style={{ fontWeight: "700", color: colors.onSurfaceSecondary }}>Cancel</Body>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Settings Menu bottom sheet */}
       <SettingsMenu
@@ -736,6 +1080,24 @@ function Row({ icon, label, value }: { icon: any; label: string; value: string }
         <Body>{label}</Body>
       </View>
       <Muted>{value}</Muted>
+    </View>
+  );
+}
+
+function AadhaarStatusPill({ status }: { status: string }) {
+  const map: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+    verified: { label: "Verified", color: "#065F46", bg: "#D1FAE5", icon: "checkmark-circle" },
+    pending: { label: "Pending Verification", color: "#92400E", bg: "#FEF3C7", icon: "hourglass" },
+    rejected: { label: "Verification Failed", color: "#991B1B", bg: "#FEE2E2", icon: "close-circle" },
+    not_uploaded: { label: "Not Uploaded", color: "#4B5563", bg: "#E5E7EB", icon: "cloud-upload" },
+  };
+  const s = map[status] || map.pending;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+      <View style={{ backgroundColor: s.bg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <Ionicons name={s.icon} size={11} color={s.color} />
+        <Text style={{ fontSize: 10, fontWeight: "800", color: s.color }}>{s.label}</Text>
+      </View>
     </View>
   );
 }
@@ -918,5 +1280,31 @@ const styles = StyleSheet.create({
   },
   yesNoBtnTextOn: {
     color: colors.onBrandPrimary,
+  },
+  aadhaarPreview: {
+    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
+    marginBottom: 10,
+  },
+  aadhaarUploadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 14,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: colors.brand + "88",
+    borderRadius: radius.md,
+    backgroundColor: colors.brandTertiary + "44",
+  },
+  aadhaarSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
 });

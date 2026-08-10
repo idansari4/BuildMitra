@@ -207,6 +207,23 @@ class ProfileUpdate(BaseModel):
     gender: Optional[str] = None  # Male / Female
     overtime_accepted: Optional[bool] = None
     minor_tools_available: Optional[bool] = None
+    # v33+ — Working hours & conveyance allowance
+    working_hours_start: Optional[str] = None  # "09:00 AM"
+    working_hours_end: Optional[str] = None    # "05:00 PM"
+    conveyance_allowance: Optional[bool] = None
+    # v33+ — Permanent address (KYC-only, never publicly exposed)
+    permanent_address: Optional[str] = None
+    permanent_city: Optional[str] = None
+    permanent_state: Optional[str] = None
+    permanent_pin_code: Optional[str] = None
+    permanent_country: Optional[str] = None
+    # v33+ — Aadhaar / identity verification document
+    aadhaar_document_url: Optional[str] = None  # base64 data URL (image/pdf)
+    aadhaar_document_type: Optional[str] = None  # "image" | "pdf"
+    aadhaar_document_name: Optional[str] = None
+    # aadhaar_status is admin-controlled; user submission auto-sets to "pending"
+    aadhaar_status: Optional[str] = None  # not_uploaded | pending | verified | rejected
+    aadhaar_rejection_reason: Optional[str] = None
     # Client-specific extended fields
     business_type: Optional[str] = None  # Individual / Contractor / Builder / Developer / Company
     contact_person: Optional[str] = None
@@ -938,6 +955,19 @@ async def me_availability_status(user=Depends(current_user)):
 @api.put("/me")
 async def update_me(body: ProfileUpdate, user=Depends(current_user)):
     update = {k: v for k, v in body.model_dump().items() if v is not None}
+
+    # Aadhaar safety — users cannot self-verify. Any client-supplied
+    # aadhaar_status is rewritten to "pending" when a new document is being
+    # uploaded, and rejected otherwise so only admins can change status.
+    incoming_status = update.pop("aadhaar_status", None)
+    if "aadhaar_document_url" in update:
+        # New document upload → force pending regardless of what client sent
+        update["aadhaar_status"] = "pending"
+        # Clear any previous rejection reason on re-upload
+        update["aadhaar_rejection_reason"] = ""
+    elif incoming_status:
+        # Client tried to set status without uploading — silently ignore
+        pass
 
     # Enforce Availability rules on workers when turning ON
     if user.get("role") == "worker" and update.get("available") is True:
