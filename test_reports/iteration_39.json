@@ -1,0 +1,27 @@
+{
+  "summary": "Iter 39 retest — Phase 4 per-slot wage refinement: PASS. Backend 3/3 pytest cases green (mixed-skill 4-slot expansion with slot_skill/slot_daily_wage/slot_wage_type='day'; supervisor-only slot with slot_wage_type='hour', slot_hours=5, slot_total_wage=1500; per-slot mapping shift after 1 accept -> 3 remaining items filled=1/remaining=3, ordered Full Trained then Helper x2). Frontend Worker Home retest: fresh worker sees 4 mixed-skill vacancy cards (2 x ₹900/day 'Full Trained' + 2 x ₹500/day 'Helper') each with new 'Skill Level' InfoRow, and legacy no-skills job still renders '₹650 / day' via top-level daily_wage fallback with no 'Skill Level' row. No console/page errors on Home tab.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter39_slot_wage_refinement.py",
+    "/app/test_reports/pytest/iter39_slot_wage.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend still emits slot_index in /api/jobs/vacancies payload (spec §19 flags this as internal-only). Cosmetic — no functional impact, but consider stripping it before returning to workers if enumeration is a concern."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter39_slot_wage_refinement.py (new pytest)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "seed_data_creation": "Client 9000000001 posted TEST_UI_Mixed (c8813c37-…, 4 slots, Full Trained x2 @900 + Helper x2 @500) and TEST_UI_Legacy (2c4a3d3e-…, 2 slots @650). Registered ephemeral workers TEST_MixedWorker/TEST_SupvWorker/TEST_ShiftApplicant/TEST_ShiftViewer/TEST_UIWorker39 with 9931*/9955* mobiles for isolation. All rows prefixed TEST_ for future cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Per-slot wage refinement is fully working end-to-end. Vacancy item schema now includes slot_skill, slot_wage_type ('day'|'hour'), and either slot_daily_wage OR (slot_hours + slot_total_wage) for hourly Site Supervisor. resolveWage() prefers slot_* fields, then skills_required[], then top-level daily_wage. Card testID pattern remains vacancy-{jobId}-{slotIndex}. When slot_skill is present, an extra InfoRow 'Skill Level' is rendered between 'Skill Required' and 'Work Starting'.",
+  "rca_of_issue": ""
+}

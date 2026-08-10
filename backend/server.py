@@ -14,6 +14,7 @@ import bcrypt
 import jwt as pyjwt
 import secrets
 import re
+import hashlib
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1031,10 +1032,122 @@ async def list_jobs(skill: Optional[str] = None, status: str = "open", limit: in
     cursor = db.jobs.find(q, {"_id": 0}).sort("created_at", -1).limit(limit)
     return await cursor.to_list(length=limit)
 
+
+@api.get("/jobs/vacancies")
+async def worker_vacancies(
+    skill: Optional[str] = None,
+    limit: int = 100,
+    user=Depends(current_user),
+):
+    """v34 Vacancy System — expose per-slot job vacancies to workers.
+
+    - Reads the ONE original Job record (no duplication).
+    - For each open/in_progress job, computes remaining = workers_needed - accepted_applications.
+    - Emits `remaining` virtual vacancy items each with a harmless `vacancy_key`.
+    - Skips jobs the worker has already applied to (no re-apply).
+    - Poster (client/contractor) sees the single job elsewhere via /jobs/mine.
+    """
+    q: dict = {"status": {"$in": ["open", "in_progress"]}}
+    if skill:
+        q["skill"] = skill
+    jobs = await db.jobs.find(q, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(length=limit)
+    if not jobs:
+        return []
+
+    job_ids = [j["id"] for j in jobs]
+    # Pre-fetch accepted counts + already-applied set for the current worker
+    accepted_pipe = [
+        {"$match": {"job_id": {"$in": job_ids}, "status": "accepted"}},
+        {"$group": {"_id": "$job_id", "n": {"$sum": 1}}},
+    ]
+    accepted_counts = {
+        d["_id"]: d["n"]
+        async for d in db.applications.aggregate(accepted_pipe)
+    }
+
+    my_applied = set()
+    if user.get("role") == "worker":
+        async for a in db.applications.find(
+            {"worker_id": user["id"], "job_id": {"$in": job_ids}},
+            {"_id": 0, "job_id": 1},
+        ):
+            my_applied.add(a["job_id"])
+
+    out: list = []
+    for j in jobs:
+        needed = int(j.get("workers_needed") or 1)
+        filled = int(accepted_counts.get(j["id"], 0))
+        remaining = max(0, needed - filled)
+        if remaining <= 0:
+            continue
+        if j["id"] in my_applied:
+            continue  # worker already applied — do not re-expose
+
+        # Build per-slot skill mapping so each vacancy card shows its own
+        # skill + wage. For jobs without a skills_required breakdown we
+        # simply repeat the top-level `skill` and `daily_wage`.
+        skills_required = j.get("skills_required") or []
+        # Flatten: [skill A, skill A, skill B, ...] length == needed (best-effort)
+        pool: list = []
+        try:
+            for row in skills_required:
+                cnt = int(row.get("count") or 0)
+                for _ in range(cnt):
+                    pool.append(row)
+        except Exception:
+            pool = []
+        # Advance past already-filled slots so remaining vacancies start
+        # from the correct point in the flattened list.
+        pool_remaining = pool[filled:] if len(pool) >= filled else []
+
+        # Emit `remaining` virtual vacancies. Spec §19: do NOT expose a slot
+        # index/ID that identifies the specific slot to workers. We use
+        # `vacancy_key` — a harmless hash that lets the client dedupe/list
+        # entries but reveals no ordering.
+        for i in range(1, remaining + 1):
+            vk = hashlib.sha1(f"{j['id']}::{i}".encode("utf-8")).hexdigest()[:12]
+            item = {
+                **j,
+                "vacancy_key": vk,
+                "remaining": remaining,
+                "filled": filled,
+            }
+            # Attach per-slot skill/wage details if we have them
+            if i - 1 < len(pool_remaining):
+                row = pool_remaining[i - 1] or {}
+                item["slot_skill"] = row.get("skill")
+                if row.get("skill") == "Site Supervisor":
+                    item["slot_wage_type"] = "hour"
+                    item["slot_hours"] = row.get("hours")
+                    item["slot_total_wage"] = row.get("total_wage")
+                else:
+                    item["slot_wage_type"] = "day"
+                    item["slot_daily_wage"] = row.get("daily_wage")
+            out.append(item)
+    return out
+
 @api.get("/jobs/mine")
 async def my_jobs(user=Depends(current_user)):
-    cursor = db.jobs.find({"posted_by": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(200)
-    return await cursor.to_list(length=200)
+    jobs = await db.jobs.find({"posted_by": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(length=200)
+    if not jobs:
+        return []
+    # Enrich with vacancy counters so Client/Contractor Home + Activity screens
+    # can show "N Required / M Remaining / K Selected".
+    job_ids = [j["id"] for j in jobs]
+    accepted_pipe = [
+        {"$match": {"job_id": {"$in": job_ids}, "status": "accepted"}},
+        {"$group": {"_id": "$job_id", "n": {"$sum": 1}}},
+    ]
+    accepted = {
+        d["_id"]: d["n"]
+        async for d in db.applications.aggregate(accepted_pipe)
+    }
+    for j in jobs:
+        needed = int(j.get("workers_needed") or 1)
+        filled = int(accepted.get(j["id"], 0))
+        j["accepted_count"] = filled
+        j["remaining"] = max(0, needed - filled)
+    return jobs
 
 @api.get("/jobs/hired")
 async def hired_jobs(user=Depends(current_user)):
@@ -1086,6 +1199,13 @@ async def get_job(job_id: str):
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
         raise HTTPException(404, "Job not found")
+    # Enrich with vacancy counters (needed by contractor/client "5 remaining / 2 selected" UI)
+    needed = int(job.get("workers_needed") or 1)
+    accepted_count = await db.applications.count_documents(
+        {"job_id": job_id, "status": "accepted"}
+    )
+    job["accepted_count"] = accepted_count
+    job["remaining"] = max(0, needed - accepted_count)
     return job
 
 # --- Applications ---
@@ -1141,6 +1261,17 @@ async def update_application_status(app_id: str, body: ApplicationStatusIn, user
     job = await db.jobs.find_one({"id": appn["job_id"]})
     if not job or job["posted_by"] != user["id"]:
         raise HTTPException(403, "Not your job")
+    # v34 — overbooking prevention. Reject accept when all vacancies are filled.
+    if body.status == "accepted" and appn.get("status") != "accepted":
+        needed = int(job.get("workers_needed") or 1)
+        accepted_count = await db.applications.count_documents(
+            {"job_id": appn["job_id"], "status": "accepted"}
+        )
+        if accepted_count >= needed:
+            raise HTTPException(
+                400,
+                f"All {needed} vacancies for this job are already filled",
+            )
     await db.applications.update_one(
         {"id": app_id},
         {"$set": {"status": body.status, "status_updated_at": now_iso()}}

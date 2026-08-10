@@ -86,6 +86,8 @@ export const api = {
   changePassword: (old_password: string, new_password: string) => req("PUT", "/me/password", { old_password, new_password }),
   skills: () => req("GET", "/skills"),
   jobs: (skill?: string) => req("GET", `/jobs${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`),
+  workerVacancies: (skill?: string) =>
+    req("GET", `/jobs/vacancies${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`),
   job: (id: string) => req("GET", `/jobs/${id}`),
   myJobs: () => req("GET", "/jobs/mine"),
   postJob: (b: any) => req("POST", "/jobs", b),

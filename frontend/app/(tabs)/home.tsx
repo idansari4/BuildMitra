@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, FlatList, Pressable, RefreshControl, ActivityIndicator } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -8,26 +16,41 @@ import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
 import { colors, radius, spacing, SKILLS, type as t } from "@/src/theme";
-import { H1, H2, Body, Muted, Chip, Card } from "@/src/ui";
+import { H2, Body, Muted, Chip, Card, PrimaryButton } from "@/src/ui";
+import { formatIsoDate } from "@/src/utils/date";
+
+/**
+ * v34 Worker Home — Vacancy System
+ * - Workers see one card per available vacancy (a 7-worker job → 7 cards).
+ * - The underlying Job is not duplicated; slots are computed server-side.
+ * - Applying to a vacancy blocks the worker from other slots of the same job.
+ */
 
 export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
   const { t: tr } = useT();
-  const [jobs, setJobs] = useState<any[]>([]);
+  const [items, setItems] = useState<any[]>([]);
   const [skill, setSkill] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [applyingKey, setApplyingKey] = useState<string | null>(null);
   const [aiMatch, setAiMatch] = useState<{ summary: string; top_job_ids: string[] } | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
+  const isWorker = user?.role === "worker";
+
   const load = useCallback(async () => {
     try {
-      const data = user?.role === "worker" || !user ? await api.jobs(skill || undefined) : await api.myJobs();
-      setJobs(data);
-    } catch {}
+      const data = isWorker
+        ? await api.workerVacancies(skill || undefined)
+        : await api.myJobs();
+      setItems(Array.isArray(data) ? data : []);
+    } catch {
+      setItems([]);
+    }
     setLoading(false);
-  }, [skill, user]);
+  }, [skill, isWorker]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -38,12 +61,26 @@ export default function Home() {
     try {
       const r = await api.aiMatch();
       setAiMatch(r);
-    } catch (e: any) {
+    } catch {
       setAiMatch({ summary: "AI match unavailable right now.", top_job_ids: [] });
-    } finally { setAiLoading(false); }
+    } finally {
+      setAiLoading(false);
+    }
   };
 
-  const isWorker = user?.role === "worker";
+  const applyNow = async (job: any) => {
+    const key = job.vacancy_key || job.id;
+    setApplyingKey(key);
+    try {
+      await api.apply({ job_id: job.id, message: "" });
+      // Remove all remaining slots of this job for this worker from the list
+      setItems((prev) => prev.filter((it) => it.id !== job.id));
+    } catch {
+      // Silent fail — user can retry; a proper toast could be added later.
+    } finally {
+      setApplyingKey(null);
+    }
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
@@ -65,15 +102,15 @@ export default function Home() {
           contentContainerStyle={styles.chipRow}
         >
           <Chip testID="skill-all" label={tr("common.all")} selected={!skill} onPress={() => setSkill(null)} />
-          {SKILLS.map((s) => (
+          {SKILLS.filter((s) => s !== "Other").map((s) => (
             <Chip key={s} testID={`skill-${s}`} label={s} selected={skill === s} onPress={() => setSkill(s)} />
           ))}
         </ScrollView>
       )}
 
       <FlatList
-        data={jobs}
-        keyExtractor={(it) => it.id}
+        data={items}
+        keyExtractor={(it) => it.vacancy_key || it.id}
         contentContainerStyle={{ padding: spacing.md, paddingBottom: 100, gap: spacing.md }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
@@ -103,73 +140,283 @@ export default function Home() {
             </View>
           )
         }
-        renderItem={({ item }) => {
-          const highlight = aiMatch?.top_job_ids?.includes(item.id);
-          return (
-            <Pressable testID={`job-${item.id}`} onPress={() => router.push(`/job/${item.id}` as any)}>
-              <Card style={highlight ? { borderColor: colors.brand, borderWidth: 2 } : undefined}>
-                {highlight && (
-                  <View style={styles.aiTag}>
-                    <Ionicons name="sparkles" size={12} color={colors.onBrandPrimary} />
-                    <Body style={{ fontSize: 11, color: colors.onBrandPrimary, fontWeight: "800" }}>{tr("home.ai.tag")}</Body>
-                  </View>
-                )}
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Body style={{ fontWeight: "700", fontSize: t.lg }}>{item.title}</Body>
-                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 }}>
-                      <Ionicons name="location-outline" size={14} color={colors.onSurfaceSecondary} />
-                      <Muted>{item.location}</Muted>
-                    </View>
-                  </View>
-                  <View style={styles.wage}>
-                    <Body style={{ fontWeight: "800", color: colors.onBrandPrimary }}>₹{item.daily_wage}</Body>
-                    <Body style={{ fontSize: 10, color: colors.onBrandPrimary }}>{tr("common.perDay")}</Body>
-                  </View>
-                </View>
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                  <View style={styles.tagSkill}><Body style={{ fontSize: t.sm, fontWeight: "700" }}>{item.skill}</Body></View>
-                  <View style={styles.tagInfo}><Body style={{ fontSize: t.sm }}>{item.workers_needed} {tr("common.workers")}</Body></View>
-                  {item.urgency === "Urgent" && (
-                    <View style={styles.tagUrgent}><Body style={{ fontSize: t.sm, fontWeight: "700", color: colors.onError }}>{tr("common.urgent")}</Body></View>
-                  )}
-                  {!isWorker && (
-                    <View style={styles.tagInfo}><Body style={{ fontSize: t.sm }}>{item.applicants_count} {tr("common.applied")}</Body></View>
-                  )}
-                </View>
-              </Card>
-            </Pressable>
-          );
-        }}
+        renderItem={({ item }) => (
+          isWorker ? (
+            <WorkerVacancyCard
+              item={item}
+              highlight={aiMatch?.top_job_ids?.includes(item.id)}
+              onOpen={() => router.push(`/job/${item.id}` as any)}
+              onApply={() => applyNow(item)}
+              applying={applyingKey === (item.vacancy_key || item.id)}
+            />
+          ) : (
+            <ClientJobCard item={item} onOpen={() => router.push(`/job/${item.id}` as any)} />
+          )
+        )}
       />
     </SafeAreaView>
   );
 }
 
+/* ---------------- Worker Vacancy Card ---------------- */
+function WorkerVacancyCard({
+  item,
+  highlight,
+  onOpen,
+  onApply,
+  applying,
+}: {
+  item: any;
+  highlight?: boolean;
+  onOpen: () => void;
+  onApply: () => void;
+  applying: boolean;
+}) {
+  const { t: tr } = useT();
+  // Resolve wage — prefer per-skill wage from skills_required if present.
+  const wageInfo = resolveWage(item);
+
+  return (
+    <Pressable testID={`vacancy-${item.vacancy_key || item.id}`} onPress={onOpen}>
+      <Card style={highlight ? { borderColor: colors.brand, borderWidth: 2 } : undefined}>
+        {highlight && (
+          <View style={styles.aiTag}>
+            <Ionicons name="sparkles" size={12} color={colors.onBrandPrimary} />
+            <Body style={{ fontSize: 11, color: colors.onBrandPrimary, fontWeight: "800" }}>{tr("home.ai.tag")}</Body>
+          </View>
+        )}
+
+        {/* Title + urgency */}
+        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
+          <Body style={{ fontWeight: "800", fontSize: t.lg, flex: 1, paddingRight: 8 }}>
+            {item.title}
+          </Body>
+          {item.urgency === "Urgent" ? (
+            <View style={styles.tagUrgent}>
+              <Body style={{ fontSize: 10, fontWeight: "800", color: colors.onError }}>URGENT</Body>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Info rows */}
+        <View style={{ marginTop: 10, gap: 6 }}>
+          <InfoRow icon="location" label="Location" value={item.location || "-"} />
+          <InfoRow icon="build" label="Skill Required" value={item.skill || "-"} />
+          {item.slot_skill ? (
+            <InfoRow icon="ribbon" label="Skill Level" value={item.slot_skill} />
+          ) : null}
+          {item.working_start_date ? (
+            <InfoRow icon="calendar" label="Work Starting" value={formatIsoDate(item.working_start_date)} />
+          ) : null}
+          <InfoRow
+            icon="time"
+            label="Work Duration"
+            value={
+              item.working_duration
+                ? String(item.working_duration).replace(/^Custom:\s*/, "")
+                : (item.duration_days ? `${item.duration_days} Days` : "-")
+            }
+          />
+          <InfoRow
+            icon="cash"
+            label="Wage"
+            value={wageInfo.display}
+            highlight
+          />
+        </View>
+
+        {/* Apply CTA */}
+        <View style={{ marginTop: 12 }}>
+          <PrimaryButton
+            testID={`vacancy-apply-${item.vacancy_key || item.id}`}
+            label={applying ? "Applying..." : "Apply Now"}
+            icon="paper-plane-outline"
+            loading={applying}
+            onPress={onApply}
+          />
+        </View>
+      </Card>
+    </Pressable>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+  highlight,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <View style={styles.infoRow}>
+      <Ionicons name={icon} size={14} color={colors.brand} />
+      <Body style={{ flex: 1, fontSize: 12, color: colors.onSurfaceSecondary, fontWeight: "600" }}>
+        {label}
+      </Body>
+      <Body
+        style={{
+          fontSize: 13,
+          fontWeight: highlight ? "800" : "700",
+          color: highlight ? colors.brand : colors.onSurface,
+          maxWidth: 210,
+          textAlign: "right",
+        }}
+        numberOfLines={2}
+      >
+        {value}
+      </Body>
+    </View>
+  );
+}
+
+/* ---------------- Client / Contractor Job Card ---------------- */
+function ClientJobCard({ item, onOpen }: { item: any; onOpen: () => void }) {
+  const { t: tr } = useT();
+  const needed = Number(item.workers_needed || 0);
+  const filled = Number(item.accepted_count || 0);
+  const remaining = Math.max(0, needed - filled);
+  return (
+    <Pressable testID={`job-${item.id}`} onPress={onOpen}>
+      <Card>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Body style={{ fontWeight: "800", fontSize: t.lg }}>{item.title}</Body>
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 }}>
+              <Ionicons name="location-outline" size={14} color={colors.onSurfaceSecondary} />
+              <Muted>{item.location}</Muted>
+            </View>
+          </View>
+          {item.daily_wage ? (
+            <View style={styles.wage}>
+              <Body style={{ fontWeight: "800", color: colors.onBrandPrimary }}>₹{item.daily_wage}</Body>
+              <Body style={{ fontSize: 10, color: colors.onBrandPrimary }}>{tr("common.perDay")}</Body>
+            </View>
+          ) : null}
+        </View>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          <View style={styles.tagSkill}>
+            <Body style={{ fontSize: t.sm, fontWeight: "700" }}>{item.skill}</Body>
+          </View>
+          <View style={styles.tagInfo}>
+            <Body style={{ fontSize: t.sm }}>{needed} Workers Required</Body>
+          </View>
+          <View style={styles.tagInfo}>
+            <Body style={{ fontSize: t.sm }}>{remaining} Remaining</Body>
+          </View>
+          <View style={styles.tagInfo}>
+            <Body style={{ fontSize: t.sm }}>{filled} Selected</Body>
+          </View>
+          {item.urgency === "Urgent" && (
+            <View style={styles.tagUrgent}>
+              <Body style={{ fontSize: t.sm, fontWeight: "700", color: colors.onError }}>{tr("common.urgent")}</Body>
+            </View>
+          )}
+        </View>
+      </Card>
+    </Pressable>
+  );
+}
+
+/* ---------------- Wage helper ---------------- */
+function resolveWage(job: any): { display: string; type: "day" | "hour" | "unknown" } {
+  // Prefer per-slot wage attached by the backend vacancies expander.
+  if (job.slot_wage_type === "day" && job.slot_daily_wage) {
+    return {
+      display: `₹${Number(job.slot_daily_wage).toLocaleString("en-IN")} / day`,
+      type: "day",
+    };
+  }
+  if (job.slot_wage_type === "hour" && job.slot_total_wage) {
+    return {
+      display: `₹${Number(job.slot_total_wage).toLocaleString("en-IN")} (${job.slot_hours}h supervision)`,
+      type: "hour",
+    };
+  }
+  const sr = job.skills_required as any[] | undefined;
+  if (Array.isArray(sr) && sr.length > 0) {
+    const nonSup = sr.find(
+      (r) => r?.skill !== "Site Supervisor" && (r?.daily_wage || 0) > 0
+    );
+    if (nonSup) return { display: `₹${Number(nonSup.daily_wage).toLocaleString("en-IN")} / day`, type: "day" };
+    const sup = sr.find((r) => r?.skill === "Site Supervisor" && r?.hours);
+    if (sup) return { display: `₹${(sup.total_wage || 500).toLocaleString("en-IN")} (${sup.hours}h supervision)`, type: "hour" };
+  }
+  if (job.daily_wage && job.daily_wage > 0) {
+    return { display: `₹${Number(job.daily_wage).toLocaleString("en-IN")} / day`, type: "day" };
+  }
+  return { display: "Wage not specified", type: "unknown" };
+}
+
 const styles = StyleSheet.create({
   header: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   badge: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 12, height: 36, borderRadius: radius.pill,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: radius.pill,
     backgroundColor: colors.brandTertiary,
   },
   chipRow: { paddingHorizontal: spacing.md, gap: 8, height: 56, alignItems: "center" },
   aiCard: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    padding: spacing.md, borderRadius: radius.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: spacing.md,
+    borderRadius: radius.lg,
   },
   aiTag: {
-    position: "absolute", top: -10, right: 12, paddingHorizontal: 8, paddingVertical: 4,
-    backgroundColor: colors.brand, borderRadius: radius.sm, flexDirection: "row", gap: 4, alignItems: "center",
+    position: "absolute",
+    top: -10,
+    right: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: colors.brand,
+    borderRadius: radius.sm,
+    flexDirection: "row",
+    gap: 4,
+    alignItems: "center",
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   wage: {
-    backgroundColor: colors.brand, paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: radius.md, alignItems: "center",
+    backgroundColor: colors.brand,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    alignItems: "center",
   },
-  tagSkill: { backgroundColor: colors.brandTertiary, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
-  tagInfo: { backgroundColor: colors.surfaceSecondary, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
-  tagUrgent: { backgroundColor: colors.error, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
+  tagSkill: {
+    backgroundColor: colors.brandTertiary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
+  tagInfo: {
+    backgroundColor: colors.surfaceSecondary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
+  tagUrgent: {
+    backgroundColor: colors.error,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
 });

@@ -1,0 +1,28 @@
+{
+  "summary": "Phase 4 (Worker Home Vacancy System) tested end-to-end. Backend 3/3 pytest cases pass (vacancy expansion, overbooking prevention, /jobs/{id} enrichment). Frontend Worker Home renders one card per vacancy with correct testIDs (vacancy-{jobId}-{slotIndex}), displays all required rows (Title/Location/Skill Required/Work Starting DD-MM-YYYY/Work Duration/Wage), Apply Now removes all sibling slots for the same job after apply, and skill chip filter works. Client Home shows 'N Workers Required / M Remaining / K Selected' chips and job appears exactly once. Job detail page opens without crash. All Phase 4 acceptance criteria met.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter38_phase4_vacancies.py",
+    "/app/test_reports/pytest/iter38_phase4.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "resolveWage() in home.tsx picks the first non-supervisor daily_wage from skills_required[]. If a job has multiple non-supervisor skill rows with different wages (e.g. Full Trained ₹900 + Helper ₹500), every one of the 4 vacancy cards displays the same ₹900. Since backend does not currently tag which slot maps to which skill_required row, workers do not see the actual wage for their specific slot. Consider distributing skill/wage per slot_index server-side (e.g. slot_index → skill mapping) in a future phase.",
+    "Backend /api/jobs/vacancies emits `slot_index` in the payload — spec §19 warns it is 'internal only' but it is still visible in the response. Not a functional bug, but worth revisiting if the intent is that workers cannot enumerate slot IDs."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter38_phase4_vacancies.py (new pytest)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "seed_data_creation": "Backend tests create TEST_-prefixed jobs and register disposable TEST_Worker2/TEST_Worker3 accounts (mobile 9911/9922 + random 6 hex). Frontend flow reuses jobs a606438d… and a04c5b4c… posted during the test run and registers TEST_UIWorker with mobile 9977xxxxxx. Data is safe to keep — all rows prefixed TEST_ for future cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase-4 vacancy system fully green. Worker vacancy list uses testID pattern vacancy-{jobId}-{slotIndex} and vacancy-apply-{jobId}-{slotIndex}. Client card testID is job-{jobId}. If additional slot→skill mapping is added later, update resolveWage() to key by slot_index/skill.",
+  "rca_of_issue": ""
+}

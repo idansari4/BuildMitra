@@ -1,0 +1,29 @@
+{
+  "summary": "Iter 40 Phase 4 cleanup retest — PASS. Backend 6/6 pytest green: (a) GET /api/jobs/vacancies now emits `vacancy_key` (12-hex SHA-1 short hash) on every item and NEVER `slot_index` — validated globally across all returned items, uniqueness within a job confirmed, and existing per-slot metadata (slot_skill, slot_wage_type, slot_daily_wage for day, slot_hours+slot_total_wage for Site Supervisor hourly) still populated correctly. (b) GET /api/jobs/mine enriches every job with numeric `accepted_count` and `remaining`; fresh 4-worker job returns accepted_count=0, remaining=4 as spec'd. Regression (login for all 3 roles, post_job, /api/me) intact. Frontend Worker Home mobile-web scan: 15 card testIDs `vacancy-{key}` + 15 `vacancy-apply-{key}`, ZERO legacy `vacancy-{id}-{n}` residue after my one-line testID fix on the outer Pressable. Frontend Client Activity: every job card renders the three new chips `N Required · M Remaining · K Selected`, values match backend enrichment (e.g. 4·3·1 for job with one acceptance, 4·4·0 for fresh jobs).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter40_vacancy_key_and_mine.py",
+    "/app/test_reports/pytest/iter40_cleanup.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fixed inline: frontend /app/frontend/app/(tabs)/home.tsx line 180 had outer <Pressable> testID={`vacancy-${item.id}-${item.slot_index || 0}`} which, now that backend no longer emits slot_index, would have collapsed to `vacancy-{jobId}-0` for every sibling slot of a multi-slot job → testID collisions and inconsistent with the new spec. Corrected to `vacancy-${item.vacancy_key || item.id}` to match the Apply button and the review-request spec.",
+    "Non-blocking: Expo package version drift warned by supervisor logs (expo 54.0.34 vs expected ~54.0.36, expo-font 14.0.11 vs 14.0.12, expo-router 6.0.23 vs 6.0.24). App runs fine but consider `npx expo install --fix` in a future maintenance pass."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter40_vacancy_key_and_mine.py (new pytest, 6 tests)",
+    "/app/frontend/app/(tabs)/home.tsx (line 180 testID: vacancy-${id}-${slot_index||0} → vacancy-${vacancy_key||id})"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "seed_data_creation": "Client 9000000001 posted 3 TEST_Iter40 jobs (mixed 4-slot Full Trained ×2 @900 + Helper ×2 @500; supervisor hourly 5h/₹1500; plain 4-worker @500 and 2-worker @600 regression). Ephemeral workers TEST_Iter40Worker, TEST_Iter40Supv registered on 9932* mobiles. All rows prefixed TEST_ for cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 4 cleanup fully verified. Vacancy item schema: {id, vacancy_key (12-hex), filled, remaining, slot_skill, slot_wage_type ('day'|'hour'), slot_daily_wage OR (slot_hours+slot_total_wage), ...rest of job}. NO slot_index anywhere. /jobs/mine schema: every job carries accepted_count:int and remaining:int alongside workers_needed. Frontend testID pattern: cards `vacancy-{vacancy_key}`, apply buttons `vacancy-apply-{vacancy_key}` — both used in home.tsx after my fix. Activity chips defined in /app/frontend/app/(tabs)/activity.tsx lines 83-97.",
+  "rca_of_issue": ""
+}
