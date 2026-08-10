@@ -1,0 +1,46 @@
+{
+  "summary": "Iter36 — BuildMitra Phase 2 Post-a-Job per-skill wage system + PDF/drawing modal fully verified. Backend persistence (5 pytest) + frontend Playwright validation (Residential + Daily Worker path, all 4 wage/hours validation branches, supervisor auto-calc for hours=1/2/3/5, digit-only wage filter, drawing chooser modal open+cancel, contractor regression, successful end-to-end submit) all PASS. Zero issues found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_post_job_iter36.py",
+    "/app/test_reports/pytest/iter36_post_job.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "post.tsx computeSupervisorWage math verified: h<=1 → 500, h>1 → 500 + (h-1)*250 (e.g. h=2 →750, h=3 →1000, h=5 →1500). Matches UI display.",
+    "Wage validation loop (lines 313-325) correctly emits the exact strings 'Enter Daily Wage for Full Trained/Semi Trained/Helper' and 'Enter Supervision Hours for Site Supervisor'.",
+    "PDF MIME check on line 217-222 accepts application/pdf OR filename ending .pdf (handles Android application/octet-stream case) — good.",
+    "File size /app/frontend/app/(tabs)/post.tsx is 1240 lines — >700 threshold. Recommend main agent extract SectionCard, SegmentBtn, SkillRow, DrawingChooserModal, and location block into separate components in a future refactor pass (not blocking).",
+    "post.tsx uses expo-image-picker MediaTypeOptions.Images which is deprecated in SDK 51+; not fixed in this iteration but flagged."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_post_job_iter36.py (new — 5 tests)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (all Playwright assertions pass)"},
+  "seed_data_creation": "Created TEST_ jobs via API/UI as Client (9000000001). Not cleaned — cosmetic clutter only; test titles prefixed 'TEST_' or match 'Mason' for filtering.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "React Native Field/Input in this app renders testID directly on the <input> or <textarea> element itself (no wrapper). So use selector '[data-testid=\"xxx\"]' for page.fill / input_value — NOT '[data-testid=\"xxx\"] input'. sk-super-total-site-supervisor renders '₹500' / '₹750' / '₹1,000' / '₹1,500'. Login via urllib to /api/auth/login returns 403 from the container's outbound network — use page.evaluate(fetch(...)) inside browser context and stash token in localStorage under 'bm_token' as JSON.stringify(token) (storage layer JSON-parses on read).",
+  "verification_evidence": {
+    "backend_pytest": "5 passed in 1.49s (test_post_job_iter36.py)",
+    "wage_persistence": "POST /api/jobs with 3-row skills_required (Full Trained daily_wage=900, Helper daily_wage=500, Site Supervisor hours=3/first=500/addl=250/total=1000) → GET /api/jobs/{id} returns identical structure with all extra keys preserved (verified by TestPerSkillWages::test_full_submit_with_wages_and_supervisor).",
+    "supervisor_auto_calc": {"1h": "₹500", "2h": "₹750", "3h": "₹1,000", "5h": "₹1,500"},
+    "validation_strings_confirmed": [
+      "Enter Daily Wage for Full Trained",
+      "Enter Daily Wage for Semi Trained",
+      "Enter Daily Wage for Helper",
+      "Enter Supervision Hours for Site Supervisor"
+    ],
+    "digit_only_filter": "typing 'abc900xyz' into sk-wage-full-trained → input value = '900'",
+    "drawing_chooser_modal": "drawing-choose-image, drawing-choose-pdf, drawing-choose-cancel all visible on tap; Cancel closes modal cleanly",
+    "contractor_regression": "worker-type-contractor → section-skills-required is null (hidden)",
+    "successful_submit": "Full valid submit → 'Job posted' toast + auto-navigate to activity showing new 'Mason' job",
+    "screenshots": ["/tmp/iter36_end.png", "/tmp/iter36_modal.png", "/tmp/iter36_all_ok.png"]
+  }
+}

@@ -8,6 +8,7 @@ import {
   Pressable,
   Image,
   Alert,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -55,7 +56,24 @@ const WORKING_DURATIONS = [
 const SKILL_CATEGORIES = ["Full Trained", "Semi Trained", "Helper", "Site Supervisor"] as const;
 type SkillCategory = (typeof SKILL_CATEGORIES)[number];
 
-type SkillRow = { skill: SkillCategory; count: number };
+type SkillRow = {
+  skill: SkillCategory;
+  count: number;
+  daily_wage?: number; // for Full/Semi/Helper
+  hours?: number; // for Site Supervisor
+  first_hour_rate?: number; // default 500
+  additional_hour_rate?: number; // default 250
+  total_wage?: number; // computed for Site Supervisor
+};
+
+const SUPERVISOR_FIRST_RATE = 500;
+const SUPERVISOR_ADDL_RATE = 250;
+function computeSupervisorWage(hours: number): number {
+  const h = Math.max(0, Number(hours) || 0);
+  if (h <= 0) return 0;
+  if (h <= 1) return SUPERVISOR_FIRST_RATE;
+  return Math.round(SUPERVISOR_FIRST_RATE + (h - 1) * SUPERVISOR_ADDL_RATE);
+}
 
 type Drawing = {
   data: string; // base64 data URL
@@ -101,13 +119,46 @@ export default function PostJob() {
     setSkillRows((rows) => {
       const idx = rows.findIndex((r) => r.skill === sk);
       if (idx >= 0) return rows.filter((r) => r.skill !== sk);
-      return [...rows, { skill: sk, count: 1 }];
+      if (sk === "Site Supervisor") {
+        return [
+          ...rows,
+          {
+            skill: sk,
+            count: 1,
+            hours: 1,
+            first_hour_rate: SUPERVISOR_FIRST_RATE,
+            additional_hour_rate: SUPERVISOR_ADDL_RATE,
+            total_wage: SUPERVISOR_FIRST_RATE,
+          },
+        ];
+      }
+      return [...rows, { skill: sk, count: 1, daily_wage: 0 }];
     });
   };
 
   const setSkillCount = (sk: SkillCategory, count: number) => {
     setSkillRows((rows) =>
       rows.map((r) => (r.skill === sk ? { ...r, count: Math.max(1, count) } : r))
+    );
+  };
+
+  const setSkillWage = (sk: SkillCategory, wage: number) => {
+    setSkillRows((rows) =>
+      rows.map((r) => (r.skill === sk ? { ...r, daily_wage: Math.max(0, wage) } : r))
+    );
+  };
+
+  const setSupervisorHours = (hours: number) => {
+    setSkillRows((rows) =>
+      rows.map((r) =>
+        r.skill === "Site Supervisor"
+          ? {
+              ...r,
+              hours: Math.max(0, hours),
+              total_wage: computeSupervisorWage(hours),
+            }
+          : r
+      )
     );
   };
 
@@ -152,14 +203,23 @@ export default function PostJob() {
           name: a.fileName || "drawing.jpg",
         });
       } else {
+        // PDF picker — use system document picker so files from Downloads /
+        // Documents / File Manager are all selectable on Android.
         const res = await DocumentPicker.getDocumentAsync({
-          type: "application/pdf",
+          type: ["application/pdf"],
           copyToCacheDirectory: true,
           multiple: false,
         });
         if (res.canceled || !res.assets?.[0]) return;
         const a = res.assets[0];
-        // Read as base64
+        // Validate MIME is PDF (Android sometimes labels as application/octet-stream)
+        const nameLower = (a.name || "").toLowerCase();
+        const mimeOk =
+          a.mimeType === "application/pdf" || nameLower.endsWith(".pdf");
+        if (!mimeOk) {
+          setErr("Selected file is not a PDF. Please choose a valid PDF.");
+          return;
+        }
         try {
           const FileSystem = await import("expo-file-system");
           const b64 = await (FileSystem as any).readAsStringAsync(a.uri, {
@@ -182,15 +242,11 @@ export default function PostJob() {
 
   const removeDrawing = () => setDrawing(null);
 
+  const [drawingPickerOpen, setDrawingPickerOpen] = useState(false);
   const promptDrawing = () => {
     if (Platform.OS === "web") {
-      // On web, gallery picker handles images; use document picker for pdf
-      // We ask via a simple mini choice.
-      const useImage = typeof window !== "undefined"
-        ? window.confirm("Attach an image drawing? Click Cancel to attach a PDF.")
-        : true;
-      if (useImage) pickDrawing("image");
-      else pickDrawing("pdf");
+      // Web has no native ActionSheet — show our own in-app chooser
+      setDrawingPickerOpen(true);
     } else {
       Alert.alert(
         "Upload Drawing",
@@ -253,6 +309,20 @@ export default function PostJob() {
         setErr("Enter workers needed for each selected skill");
         return;
       }
+      // Wage validation per category
+      for (const r of skillRows) {
+        if (r.skill === "Site Supervisor") {
+          if (!r.hours || r.hours <= 0) {
+            setErr("Enter Supervision Hours for Site Supervisor");
+            return;
+          }
+        } else {
+          if (!r.daily_wage || r.daily_wage <= 0) {
+            setErr(`Enter Daily Wage for ${r.skill}`);
+            return;
+          }
+        }
+      }
       if (siteStay === null) {
         setErr("Please select if Site Stay is allowed");
         return;
@@ -296,10 +366,22 @@ export default function PostJob() {
         payload.lng = lng;
       }
       if (isDailyWorker) {
-        payload.skills_required = skillRows.map((r) => ({
-          skill: r.skill,
-          count: r.count,
-        }));
+        payload.skills_required = skillRows.map((r) =>
+          r.skill === "Site Supervisor"
+            ? {
+                skill: r.skill,
+                count: r.count,
+                hours: r.hours,
+                first_hour_rate: r.first_hour_rate,
+                additional_hour_rate: r.additional_hour_rate,
+                total_wage: computeSupervisorWage(r.hours || 0),
+              }
+            : {
+                skill: r.skill,
+                count: r.count,
+                daily_wage: r.daily_wage,
+              }
+        );
         payload.site_stay_allowed = !!siteStay;
       }
       if (drawing) {
@@ -454,16 +536,18 @@ export default function PostJob() {
               {isDailyWorker ? (
                 <SectionCard title="Skills Required" icon="ribbon" testID="section-skills-required">
                   <Muted style={{ marginBottom: 8 }}>
-                    Select one or more skill categories and workers needed for each.
+                    Select one or more skill categories. Enter workers needed and wage for each.
                   </Muted>
                   <View style={{ gap: 8 }}>
                     {SKILL_CATEGORIES.map((sk) => {
                       const row = skillRows.find((r) => r.skill === sk);
                       const selected = !!row;
+                      const skId = sk.toLowerCase().replace(/\s+/g, "-");
+                      const isSupervisor = sk === "Site Supervisor";
                       return (
                         <View key={sk}>
                           <Pressable
-                            testID={`skill-cat-${sk.toLowerCase().replace(/\s+/g, "-")}`}
+                            testID={`skill-cat-${skId}`}
                             onPress={() => toggleSkill(sk)}
                             style={({ pressed }) => [
                               styles.skillCard,
@@ -488,25 +572,81 @@ export default function PostJob() {
                             </View>
                           </Pressable>
                           {selected ? (
-                            <View style={styles.workerCountRow}>
-                              <Muted style={{ flex: 1 }}>Workers Needed</Muted>
-                              <Pressable
-                                testID={`sk-dec-${sk.toLowerCase().replace(/\s+/g, "-")}`}
-                                onPress={() =>
-                                  setSkillCount(sk, Math.max(1, (row?.count || 1) - 1))
-                                }
-                                style={styles.stepperBtn}
-                              >
-                                <Ionicons name="remove" size={20} color={colors.brand} />
-                              </Pressable>
-                              <Body style={styles.stepperValue}>{row?.count}</Body>
-                              <Pressable
-                                testID={`sk-inc-${sk.toLowerCase().replace(/\s+/g, "-")}`}
-                                onPress={() => setSkillCount(sk, (row?.count || 1) + 1)}
-                                style={styles.stepperBtn}
-                              >
-                                <Ionicons name="add" size={20} color={colors.brand} />
-                              </Pressable>
+                            <View style={styles.skillDetailsWrap}>
+                              {/* Workers Needed row */}
+                              <View style={styles.workerCountRow}>
+                                <Muted style={{ flex: 1 }}>Workers Needed</Muted>
+                                <Pressable
+                                  testID={`sk-dec-${skId}`}
+                                  onPress={() =>
+                                    setSkillCount(sk, Math.max(1, (row?.count || 1) - 1))
+                                  }
+                                  style={styles.stepperBtn}
+                                >
+                                  <Ionicons name="remove" size={20} color={colors.brand} />
+                                </Pressable>
+                                <Body style={styles.stepperValue}>{row?.count}</Body>
+                                <Pressable
+                                  testID={`sk-inc-${skId}`}
+                                  onPress={() => setSkillCount(sk, (row?.count || 1) + 1)}
+                                  style={styles.stepperBtn}
+                                >
+                                  <Ionicons name="add" size={20} color={colors.brand} />
+                                </Pressable>
+                              </View>
+
+                              {isSupervisor ? (
+                                <View style={styles.wageBlock}>
+                                  <Field
+                                    testID={`sk-hours-${skId}`}
+                                    label="Supervision Hours"
+                                    required
+                                    value={row?.hours != null ? String(row.hours) : ""}
+                                    onChangeText={(v) => setSupervisorHours(Number(v.replace(/[^\d.]/g, "")))}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g., 2"
+                                  />
+                                  <View style={styles.wageInfoCard} testID={`sk-super-info-${skId}`}>
+                                    <View style={styles.wageInfoRow}>
+                                      <Muted style={{ fontSize: 12 }}>First hour</Muted>
+                                      <Body style={styles.wageInfoAmount}>₹{SUPERVISOR_FIRST_RATE}</Body>
+                                    </View>
+                                    <View style={styles.wageInfoRow}>
+                                      <Muted style={{ fontSize: 12 }}>Each additional hour</Muted>
+                                      <Body style={styles.wageInfoAmount}>₹{SUPERVISOR_ADDL_RATE}</Body>
+                                    </View>
+                                    <View style={styles.wageDivider} />
+                                    <View style={styles.wageInfoRow}>
+                                      <Body style={{ fontWeight: "800", color: colors.onSurface }}>
+                                        Estimated Wage
+                                      </Body>
+                                      <Body
+                                        testID={`sk-super-total-${skId}`}
+                                        style={styles.estWageAmount}
+                                      >
+                                        ₹{computeSupervisorWage(row?.hours || 0).toLocaleString("en-IN")}
+                                      </Body>
+                                    </View>
+                                  </View>
+                                </View>
+                              ) : (
+                                <View style={styles.wageBlock}>
+                                  <Field
+                                    testID={`sk-wage-${skId}`}
+                                    label="Daily Wage (₹)"
+                                    required
+                                    value={row?.daily_wage ? String(row.daily_wage) : ""}
+                                    onChangeText={(v) =>
+                                      setSkillWage(
+                                        sk,
+                                        parseInt(v.replace(/[^\d]/g, "")) || 0
+                                      )
+                                    }
+                                    keyboardType="number-pad"
+                                    placeholder="e.g., 900"
+                                  />
+                                </View>
+                              )}
                             </View>
                           ) : null}
                         </View>
@@ -706,6 +846,67 @@ export default function PostJob() {
             />
           </View>
         ) : null}
+
+        {/* Drawing source chooser (web-friendly ActionSheet replacement) */}
+        <Modal
+          visible={drawingPickerOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDrawingPickerOpen(false)}
+        >
+          <Pressable
+            style={styles.chooserBackdrop}
+            onPress={() => setDrawingPickerOpen(false)}
+          >
+            <Pressable onPress={() => {}} style={styles.chooserSheet}>
+              <View style={styles.chooserHandle} />
+              <Body style={styles.chooserTitle}>Upload Drawing</Body>
+              <Pressable
+                testID="drawing-choose-image"
+                onPress={() => {
+                  setDrawingPickerOpen(false);
+                  pickDrawing("image");
+                }}
+                style={({ pressed }) => [
+                  styles.chooserBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Ionicons name="image" size={22} color={colors.brand} />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Body style={{ fontWeight: "700" }}>Image (Gallery)</Body>
+                  <Muted style={{ fontSize: 12 }}>JPG, PNG, WebP</Muted>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.onSurfaceSecondary} />
+              </Pressable>
+              <Pressable
+                testID="drawing-choose-pdf"
+                onPress={() => {
+                  setDrawingPickerOpen(false);
+                  pickDrawing("pdf");
+                }}
+                style={({ pressed }) => [
+                  styles.chooserBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Ionicons name="document-text" size={22} color={colors.brand} />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Body style={{ fontWeight: "700" }}>PDF Document</Body>
+                  <Muted style={{ fontSize: 12 }}>From Downloads / Files</Muted>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.onSurfaceSecondary} />
+              </Pressable>
+              <Pressable
+                testID="drawing-choose-cancel"
+                onPress={() => setDrawingPickerOpen(false)}
+                style={styles.chooserCancel}
+              >
+                <Body style={{ fontWeight: "700", color: colors.onSurfaceSecondary }}>Cancel</Body>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -868,9 +1069,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    marginBottom: 0,
+    backgroundColor: colors.surface,
+  },
+  skillDetailsWrap: {
     marginTop: -4,
-    marginBottom: 4,
+    marginBottom: 6,
     borderBottomLeftRadius: radius.md,
     borderBottomRightRadius: radius.md,
     borderLeftWidth: 1,
@@ -878,6 +1083,40 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: colors.brand + "44",
     backgroundColor: colors.surface,
+    paddingBottom: 8,
+  },
+  wageBlock: {
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 4,
+  },
+  wageInfoCard: {
+    marginTop: 4,
+    borderRadius: radius.md,
+    padding: 12,
+    backgroundColor: colors.brandTertiary + "88",
+    borderWidth: 1,
+    borderColor: colors.brand + "44",
+    gap: 6,
+  },
+  wageInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  wageInfoAmount: {
+    fontWeight: "700",
+    color: colors.onSurface,
+  },
+  wageDivider: {
+    height: 1,
+    backgroundColor: colors.brand + "44",
+    marginVertical: 4,
+  },
+  estWageAmount: {
+    fontWeight: "800",
+    fontSize: 18,
+    color: colors.brand,
   },
   stepperBtn: {
     width: 36,
@@ -953,5 +1192,48 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     borderWidth: 1,
     borderColor: colors.brand + "44",
+  },
+  chooserBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
+  },
+  chooserSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  chooserHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 8,
+  },
+  chooserTitle: {
+    fontSize: t.lg,
+    fontWeight: "800",
+    marginBottom: 12,
+    color: colors.onSurface,
+  },
+  chooserBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 10,
+    backgroundColor: colors.surface,
+  },
+  chooserCancel: {
+    marginTop: 4,
+    padding: 14,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSecondary,
+    alignItems: "center",
   },
 });
