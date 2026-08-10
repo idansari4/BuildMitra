@@ -12,13 +12,21 @@ import { H1, H2, Body, Muted, Card, Chip, PrimaryButton, Field } from "@/src/ui"
 import ClientProfileBody from "@/src/components/client-profile-body";
 import SettingsMenu from "@/src/components/settings-menu";
 import Dropdown from "@/src/components/dropdown";
+import { formatMonthShort } from "@/src/utils/date";
 
 export default function Profile() {
   const router = useRouter();
   const { user, logout, refresh } = useAuth();
   const { t: tr, lang, setLang } = useT();
   const isWorker = user?.role === "worker";
-  const [skills, setSkills] = useState<string[]>(user?.skills || []);
+  const initialSkill = user?.skills?.[0] || "";
+  const initialSkillIsCustom = !!initialSkill && !SKILLS.includes(initialSkill);
+  const [skills, setSkills] = useState<string[]>(
+    initialSkillIsCustom ? ["Other"] : (user?.skills || [])
+  );
+  const [customSkill, setCustomSkill] = useState<string>(
+    initialSkillIsCustom ? initialSkill : ""
+  );
   const [experienceLevel, setExperienceLevel] = useState<string>(
     normalizeExperienceLevel((user as any)?.experience_level) || ""
   );
@@ -110,6 +118,25 @@ export default function Profile() {
     fetchAvailStatus();
   }, [fetchAvailStatus]);
 
+  // Re-hydrate Job Title state whenever the current user's skills change
+  // (e.g., after refresh() or navigating back into the tab). Ensures a
+  // non-canonical value like a custom skill is displayed as "Other" + input.
+  useEffect(() => {
+    const s = user?.skills?.[0] || "";
+    if (!s) {
+      setSkills([]);
+      setCustomSkill("");
+      return;
+    }
+    if (SKILLS.includes(s)) {
+      setSkills([s]);
+      setCustomSkill("");
+    } else {
+      setSkills(["Other"]);
+      setCustomSkill(s);
+    }
+  }, [user?.skills]);
+
   // Single-select for Job title (worker) — via Dropdown component below
   // (legacy chip-based helper removed)
 
@@ -145,8 +172,13 @@ export default function Profile() {
   const save = async () => {
     setBusy(true); setMsg("");
     try {
+      // Resolve final job title — if user picked "Other", persist the custom text
+      const finalSkill =
+        skills[0] === "Other" && customSkill.trim()
+          ? customSkill.trim()
+          : (skills[0] || null);
       const payload: any = {
-        skills,
+        skills: finalSkill ? [finalSkill] : [],
         experience_level: experienceLevel || null,
         available,
         daily_wage: parseInt(wage) || 0,
@@ -308,7 +340,7 @@ export default function Profile() {
             </View>
             {isWorker && user?.created_at ? (
               <Muted style={{ fontSize: 11, marginTop: 2 }}>
-                Joined {new Date(user.created_at).toLocaleDateString("en", { month: "short", year: "numeric" })}
+                Joined {formatMonthShort(user.created_at)}
               </Muted>
             ) : null}
           </View>
@@ -416,12 +448,26 @@ export default function Profile() {
               <Dropdown
                 testID="worker-job-title"
                 label="Job Title"
+                required
                 value={skills[0] || ""}
                 options={SKILLS}
-                onSelect={(v) => setSkills([v])}
+                onSelect={(v) => {
+                  setSkills([v]);
+                  if (v !== "Other") setCustomSkill("");
+                }}
                 placeholder="Select your primary trade"
                 searchable
               />
+              {skills[0] === "Other" ? (
+                <Field
+                  testID="worker-custom-skill"
+                  label="Enter Your Skill"
+                  required
+                  value={customSkill}
+                  onChangeText={setCustomSkill}
+                  placeholder="e.g., Aluminium Welder"
+                />
+              ) : null}
               <Dropdown
                 testID="worker-skill-level"
                 label="My Skills / Experience Level"

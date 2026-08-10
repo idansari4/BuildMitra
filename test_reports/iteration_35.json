@@ -1,0 +1,29 @@
+{
+  "summary": "Retest ONLY of Worker Profile 'Other' job title persistence bug (BuildMitra Phase 1). Fix in /app/frontend/app/(tabs)/profile.tsx (useState initializer + useEffect re-hydration on user?.skills change) verified via Playwright + backend API. All acceptance criteria pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix logic in profile.tsx (lines 22-29 + useEffect 124-138) is correct: initialSkillIsCustom = !!initialSkill && !SKILLS.includes(initialSkill) properly maps non-canonical skills to 'Other' + customSkill; useEffect re-hydrates after late user load / refresh()."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Restored worker (9000000002) skill back to ['Carpenter'] after test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Worker Profile 'Other' persistence bug is FIXED and verified end-to-end. Auth used API-login + injecting JSON.stringify(token) into localStorage under key 'bm_token' (storage layer JSON-parses on read).",
+  "rca_of_issue": "Original bug: useState initializer stored raw non-canonical skill (e.g., 'Chimney Fitter') into `skills[0]` instead of 'Other'. Dropdown value={skills[0]} then displayed 'Chimney Fitter' as-if it were a canonical option, and the custom input never rendered. Fix: pre-compute initialSkillIsCustom = skill && !SKILLS.includes(skill); initial state -> skills=['Other'], customSkill=skill. Added useEffect on user?.skills to re-hydrate after refresh() / async user load. Verified: 1) picked 'Other' + typed 'Chimney Fitter' -> save; 2) full page reload; 3) dropdown shows 'Other', input pre-filled 'Chimney Fitter', GET /api/me returns skills:['Chimney Fitter']; 4) reset to Carpenter, GET /api/me returns skills:['Carpenter'].",
+  "verification_evidence": {
+    "backend_get_me_after_save": ["Chimney Fitter"],
+    "dropdown_text_after_reload": "Other",
+    "custom_skill_input_after_reload": "Chimney Fitter (visible in screenshot /tmp/p3_after_reload.png)",
+    "backend_get_me_after_reset": ["Carpenter"],
+    "screenshots": ["/tmp/p1_profile_initial.png", "/tmp/p2_after_save.png", "/tmp/p3_after_reload.png", "/tmp/p4_reset.png"]
+  }
+}

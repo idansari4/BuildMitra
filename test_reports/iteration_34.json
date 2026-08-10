@@ -1,0 +1,42 @@
+{
+  "summary": "Phase 1 (Foundation) targeted regression complete. 10/11 checks pass. Post-Job 'Other' custom-title flow works end-to-end (dropdown lists 'Other' last, search filter, custom field, empty-error, job created with title/skill='False Ceiling Specialist iter34'). Red asterisks render in #DC2626 on Job Title, Work Description, Working Start Date, Working Duration on Post Job, and on Worker Profile Job Title. DD-MM-YYYY formatting confirmed: DatePickerField preview ('Selected: 11-08-2026'), job detail Working Start Date card (11-08-2026), Wallet transaction rows (26-07-2026 etc.), Attendance Today subtitle (10-08-2026). Client Profile no longer renders an 'Edit Profile' button (0 occurrences); only 'Save Profile' primary. Hamburger → 'Edit Profile' menu item stays on /profile (no accidental Home nav). Regression: worker with saved skill 'Carpenter' shows the value pre-selected in worker-job-title dropdown and does NOT render worker-custom-skill input. Existing seed jobs still visible in Home. Login works for all three roles. ONE BUG FOUND: Worker Profile 'Other' custom-skill persistence broken on reload — after saving skill 'Chimney Fitter' (via Other flow), on refresh the dropdown shows 'Chimney Fitter' instead of 'Other', and worker-custom-skill input is not rendered/prefilled.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/(tabs)/profile.tsx (worker Job Title)",
+        "issue": "When a worker has a saved skill that is NOT in the canonical SKILLS list (e.g. 'Chimney Fitter' saved via 'Other' flow), on profile reload the Dropdown value is set to the raw skill string ('Chimney Fitter') instead of 'Other', so (a) the dropdown does not display 'Other' pre-selected and (b) the worker-custom-skill input never renders (its render is gated on `skills[0] === \"Other\"`), meaning the previously-entered custom skill appears lost from the UI. Root cause: `useState<string>` initializer for customSkill returns '' on both ternary branches, and there is no derivation that maps a non-canonical stored skill → ('Other' + customSkill). Reference: /app/frontend/app/(tabs)/profile.tsx:22-27 and :425-449.",
+        "testID": "worker-job-title / worker-custom-skill",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter34_other_job.py",
+    "/app/test_reports/pytest/iter34_phase1.xml"
+  ],
+  "action_items": [
+    "Fix worker-profile 'Other' skill persistence in /app/frontend/app/(tabs)/profile.tsx. Suggested logic: derive `savedSkill = user?.skills?.[0] || ''`; if `savedSkill && !SKILLS.includes(savedSkill)` then treat it as 'Other' → set initial `skills=['Other']` and `customSkill=savedSkill`. Also in `save()` this path already re-composes finalSkill correctly, so only the load/init side needs fixing.",
+    "Optional cleanup: the useState initializer at profile.tsx:23-27 has `? \"\" : \"\"` (both branches return empty string) — this dead ternary should be removed and replaced with the correct derivation above."
+  ],
+  "critical_code_review_comments": [
+    "profile.tsx:23-27 has a no-op ternary (both branches return '') — clearly a leftover from unfinished work.",
+    "Dropdown value binding at profile.tsx:431 (`value={skills[0] || ''}`) is not filtered against SKILLS list, so a non-canonical stored value renders as a broken selection (dropdown displays the raw string but selecting the same value via the sheet would not be possible since it isn't a listed option)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "91% (10/11 checks pass; worker Other-skill reload persistence broken)"
+  },
+  "seed_data_creation": "Backend pytest created a Client job titled 'False Ceiling Specialist' (via API) and Playwright created another Client job titled 'False Ceiling Specialist iter34' (via UI). Worker skills were toggled during the test and reset back to 'Carpenter' at the end so regression #6 remains valid for future runs.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Verified public URL: https://buildmitra.preview.emergentagent.com. Client=9000000001/demo1234, Worker=9000000002/demo1234 (skill reset to Carpenter), Contractor=9000000003/demo1234. Post-Job dropdowns emit testIDs like `job-title-dd-opt-<Label>` and `working-duration-opt-<Label>`. DatePickerField preview testID: `working-start-date-preview`. To re-run backend regression: `pytest backend/tests/test_iter34_other_job.py -v`.",
+  "rca_of_issue": "Bug: Worker 'Other' custom skill lost visually on reload. Reproduction: (1) Login as worker 9000000002. (2) Profile → open worker-job-title, select Other, type 'Chimney Fitter' in worker-custom-skill, tap Save Profile. (3) Refresh /profile. Observed: dropdown label shows literal 'Chimney Fitter'; worker-custom-skill input is absent. Expected (per spec): dropdown shows 'Other' pre-selected and worker-custom-skill prefills 'Chimney Fitter'. Root cause: in profile.tsx the local state is initialised straight from `user.skills[0]` without checking membership in the canonical SKILLS list; the `customSkill` initializer is a dead ternary that always yields ''. Mitigation: on mount, if the stored skill is outside SKILLS, set `skills=['Other']` and `customSkill=<storedSkill>`. Backend correctly persists the raw string ('Chimney Fitter' returned by GET /api/me) — verified via test_iter34_other_job.py::TestWorkerCustomSkillPersistence, so this is a pure UI-hydration bug."
+}

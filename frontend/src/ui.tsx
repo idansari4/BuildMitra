@@ -37,15 +37,18 @@ export function SecondaryButton({ label, onPress, testID, style }: { label: stri
 }
 
 export function Field({
-  label, value, onChangeText, placeholder, secureTextEntry, keyboardType, testID, multiline, editable, autoCapitalize,
-}: { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string; secureTextEntry?: boolean; keyboardType?: any; testID?: string; multiline?: boolean; editable?: boolean; autoCapitalize?: "none" | "sentences" | "words" | "characters" }) {
+  label, value, onChangeText, placeholder, secureTextEntry, keyboardType, testID, multiline, editable, autoCapitalize, required,
+}: { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string; secureTextEntry?: boolean; keyboardType?: any; testID?: string; multiline?: boolean; editable?: boolean; autoCapitalize?: "none" | "sentences" | "words" | "characters"; required?: boolean }) {
   const [visible, setVisible] = React.useState(false);
   const isPassword = !!secureTextEntry;
   const hideText = isPassword && !visible;
   const isEditable = editable !== false;
   return (
     <View style={{ marginBottom: spacing.md }}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>
+        {label}
+        {required ? <Text style={styles.reqStar}> *</Text> : null}
+      </Text>
       <View style={styles.inputWrap}>
         <TextInput
           testID={testID}
@@ -128,6 +131,7 @@ const styles = StyleSheet.create({
   },
   btnSecText: { color: colors.onSurface, fontSize: type.base, fontWeight: "600" },
   label: { fontSize: type.sm, color: colors.onSurfaceSecondary, marginBottom: 6, fontWeight: "600" },
+  reqStar: { color: "#DC2626", fontWeight: "800" },
   inputWrap: { position: "relative", justifyContent: "center" },
   input: {
     borderWidth: 1, borderColor: colors.border, borderRadius: radius.md,

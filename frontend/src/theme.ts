@@ -64,6 +64,7 @@ export const SKILLS = [
   "Waterproofing Worker",
   "Wood Polisher",
   "Wooden Flooring Installer",
+  "Other",
 ];
 
 export const EXPERIENCE_LEVELS = [

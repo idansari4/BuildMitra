@@ -28,6 +28,7 @@ type Props = {
   searchable?: boolean;
   testID?: string;
   disabled?: boolean;
+  required?: boolean;
 };
 
 export default function Dropdown({
@@ -39,6 +40,7 @@ export default function Dropdown({
   searchable = false,
   testID,
   disabled,
+  required,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -57,7 +59,12 @@ export default function Dropdown({
 
   return (
     <View style={{ marginBottom: spacing.md }}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <Text style={styles.label}>
+          {label}
+          {required ? <Text style={styles.reqStar}> *</Text> : null}
+        </Text>
+      ) : null}
       <Pressable
         testID={testID}
         onPress={() => !disabled && setOpen(true)}
@@ -198,6 +205,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     fontWeight: "600",
   },
+  reqStar: { color: "#DC2626", fontWeight: "800" },
   field: {
     minHeight: 50,
     borderWidth: 1,

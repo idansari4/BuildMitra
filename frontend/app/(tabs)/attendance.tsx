@@ -17,6 +17,7 @@ import { Image } from "expo-image";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { downloadExport } from "@/src/utils/download";
+import { formatDate, formatDateTime, formatTime } from "@/src/utils/date";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card, PrimaryButton, SecondaryButton, Chip } from "@/src/ui";
 
@@ -294,7 +295,7 @@ function WorkerAttendance() {
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             <Body style={{ fontWeight: "800", fontSize: t.lg }}>Today</Body>
-            <Muted style={{ marginTop: 2 }}>{new Date().toDateString()}</Muted>
+            <Muted style={{ marginTop: 2 }}>{formatDate(new Date())}</Muted>
           </View>
           <View
             style={[
@@ -322,13 +323,13 @@ function WorkerAttendance() {
           <View style={styles.todayCell}>
             <Muted style={{ fontSize: 11 }}>Check-in</Muted>
             <Body style={{ fontWeight: "700", marginTop: 2 }}>
-              {today.lastCheckIn ? new Date(today.lastCheckIn.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+              {today.lastCheckIn ? formatTime(today.lastCheckIn.created_at) : "—"}
             </Body>
           </View>
           <View style={styles.todayCell}>
             <Muted style={{ fontSize: 11 }}>Check-out</Muted>
             <Body style={{ fontWeight: "700", marginTop: 2 }}>
-              {today.lastCheckOut ? new Date(today.lastCheckOut.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+              {today.lastCheckOut ? formatTime(today.lastCheckOut.created_at) : "—"}
             </Body>
           </View>
           <View style={styles.todayCell}>
@@ -491,7 +492,7 @@ function WorkerAttendance() {
                 {h.job_title ? (
                   <Muted style={{ marginTop: 4, fontSize: 12 }} numberOfLines={1}>📍 {h.job_title}</Muted>
                 ) : null}
-                <Muted style={{ marginTop: 2, fontSize: 11 }}>{new Date(h.created_at).toLocaleString()}</Muted>
+                <Muted style={{ marginTop: 2, fontSize: 11 }}>{formatDateTime(h.created_at)}</Muted>
               </View>
               <View style={{ alignItems: "flex-end" }}>
                 <View
@@ -683,7 +684,7 @@ export function MonitorAttendance({ role }: { role: string }) {
                   {r.job_title ? ` · ${r.job_title}` : ""}
                 </Muted>
                 <Muted style={{ marginTop: 2, fontSize: 11 }}>
-                  {new Date(r.created_at).toLocaleString()}
+                  {formatDateTime(r.created_at)}
                 </Muted>
               </View>
               <View style={{ alignItems: "flex-end" }}>

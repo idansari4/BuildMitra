@@ -9,6 +9,7 @@ import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { colors, radius, spacing, SKILL_IMAGES, type as t } from "@/src/theme";
 import { H1, Body, Muted, PrimaryButton, Card, SecondaryButton } from "@/src/ui";
+import { formatIsoDate } from "@/src/utils/date";
 
 import { RatingSheet } from "@/src/rating-sheet";
 
@@ -151,6 +152,18 @@ export default function JobDetail() {
           <Stat label="Workers" value={String(job.workers_needed)} />
           <Stat label="Duration" value={`${job.duration_days}d`} />
         </View>
+
+        {job.working_start_date ? (
+          <Card testID="job-start-date">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="calendar" size={20} color={colors.brand} />
+              <View style={{ flex: 1 }}>
+                <Muted style={{ fontSize: 12, fontWeight: "700" }}>Working Start Date</Muted>
+                <Body style={{ fontWeight: "800", marginTop: 2 }}>{formatIsoDate(job.working_start_date)}</Body>
+              </View>
+            </View>
+          </Card>
+        ) : null}
 
         {job.working_duration ? (
           <Card testID="job-working-duration">

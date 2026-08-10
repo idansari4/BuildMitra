@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radius, spacing, type as t } from "@/src/theme";
+import { formatIsoDate } from "@/src/utils/date";
 
 /**
  * Cross-platform mobile-friendly date picker field (no native deps).
@@ -104,9 +105,14 @@ export default function DatePickerField({
     <View style={{ marginBottom: spacing.md }}>
       <Text style={styles.label}>
         {label}
-        {required ? " *" : ""}
+        {required ? <Text style={styles.reqStar}> *</Text> : null}
       </Text>
       {renderInput()}
+      {value ? (
+        <Text style={styles.previewText} testID={testID ? `${testID}-preview` : undefined}>
+          Selected: {formatIsoDate(value)}
+        </Text>
+      ) : null}
       <View style={styles.quickRow}>
         {QUICK.map((q) => (
           <Pressable
@@ -132,6 +138,13 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceSecondary,
     marginBottom: 6,
     fontWeight: "600",
+  },
+  reqStar: { color: "#DC2626", fontWeight: "800" },
+  previewText: {
+    fontSize: 12,
+    color: colors.brand,
+    fontWeight: "700",
+    marginTop: 6,
   },
   input: {
     minHeight: 50,

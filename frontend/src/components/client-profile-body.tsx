@@ -190,30 +190,15 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
         </Pressable>
       </SectionCard>
 
-      {/* Combined Save + Edit action row */}
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <View style={{ flex: 1 }}>
-          <PrimaryButton
-            testID="client-save-profile"
-            label="Save Profile"
-            icon="checkmark-circle-outline"
-            loading={busy}
-            onPress={save}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Pressable
-            testID="edit-profile-btn"
-            onPress={() => {
-              onNavigate?.("#client-info");
-            }}
-            style={styles.editBtn}
-          >
-            <Ionicons name="create-outline" size={20} color={colors.brand} />
-            <Body style={{ color: colors.brand, fontWeight: "800", marginLeft: 6 }}>Edit Profile</Body>
-          </Pressable>
-        </View>
-      </View>
+      {/* Save action (Edit was previously a no-op that navigated to Home — removed).
+          The whole page is already an inline edit form. */}
+      <PrimaryButton
+        testID="client-save-profile"
+        label="Save Profile"
+        icon="checkmark-circle-outline"
+        loading={busy}
+        onPress={save}
+      />
       {msg ? (
         <Body style={{ color: msg.includes("✓") ? colors.success : colors.error, textAlign: "center" }}>{msg}</Body>
       ) : null}

@@ -71,6 +71,7 @@ export default function PostJob() {
   const [siteType, setSiteType] = useState<"residential" | "commercial" | "">("");
   const [workerType, setWorkerType] = useState<"daily_worker" | "contractor" | "">("");
   const [jobTitle, setJobTitle] = useState<string>("");
+  const [customJobTitle, setCustomJobTitle] = useState<string>("");
   const [description, setDescription] = useState("");
   const [workingStartDate, setWorkingStartDate] = useState("");
   const [workingDuration, setWorkingDuration] = useState<string>("");
@@ -219,6 +220,10 @@ export default function PostJob() {
       setErr("Please select a Job Title");
       return;
     }
+    if (jobTitle === "Other" && !customJobTitle.trim()) {
+      setErr("Please enter your custom Job Title");
+      return;
+    }
     if (!description.trim()) {
       setErr("Please enter Work Description");
       return;
@@ -265,10 +270,11 @@ export default function PostJob() {
         workingDuration === "Custom Duration"
           ? `Custom: ${customDuration.trim()}`
           : workingDuration;
+      const finalTitle = jobTitle === "Other" ? customJobTitle.trim() : jobTitle;
       const payload: any = {
-        title: jobTitle,
+        title: finalTitle,
         description: description.trim(),
-        skill: jobTitle, // primary skill = job title
+        skill: finalTitle, // primary skill = job title (or custom)
         workers_needed: totalWorkers,
         daily_wage: 0, // removed from UI
         location: composedLocation || city,
@@ -306,6 +312,7 @@ export default function PostJob() {
       setOk("Job posted ✓");
       // Reset
       setJobTitle("");
+      setCustomJobTitle("");
       setDescription("");
       setWorkingStartDate("");
       setWorkingDuration("");
@@ -421,13 +428,27 @@ export default function PostJob() {
               {/* Job Title */}
               <Dropdown
                 testID="job-title-dd"
-                label={`Job Title${" *"}`}
+                label="Job Title"
+                required
                 value={jobTitle}
                 options={SKILLS}
-                onSelect={setJobTitle}
+                onSelect={(v) => {
+                  setJobTitle(v);
+                  if (v !== "Other") setCustomJobTitle("");
+                }}
                 placeholder="Select job title"
                 searchable
               />
+              {jobTitle === "Other" ? (
+                <Field
+                  testID="custom-job-title-input"
+                  label="Enter Job Title"
+                  required
+                  value={customJobTitle}
+                  onChangeText={setCustomJobTitle}
+                  placeholder="e.g., False Ceiling Specialist"
+                />
+              ) : null}
 
               {/* Skills Required — only Daily Wages Worker */}
               {isDailyWorker ? (
@@ -498,7 +519,8 @@ export default function PostJob() {
               {/* Work Description */}
               <Field
                 testID="desc-input"
-                label="Work Description *"
+                label="Work Description"
+                required
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Scope of work, expectations..."
@@ -518,7 +540,8 @@ export default function PostJob() {
               {/* Working Duration */}
               <Dropdown
                 testID="working-duration"
-                label="Working Duration *"
+                label="Working Duration"
+                required
                 value={workingDuration}
                 options={WORKING_DURATIONS}
                 onSelect={(v) => {
@@ -530,7 +553,8 @@ export default function PostJob() {
               {workingDuration === "Custom Duration" ? (
                 <Field
                   testID="custom-duration-input"
-                  label="Custom Duration *"
+                  label="Custom Duration"
+                  required
                   value={customDuration}
                   onChangeText={setCustomDuration}
                   placeholder="e.g., 45 Days, 10 Weeks, Ongoing till Diwali"

@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { downloadExport } from "@/src/utils/download";
+import { formatDate, formatTime } from "@/src/utils/date";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card, PrimaryButton, SecondaryButton, Field, Chip } from "@/src/ui";
 import { PaymentSheet } from "@/src/payment-sheet";
@@ -391,9 +392,9 @@ export default function Wallet() {
                     </Body>
                     <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3, gap: 6, flexWrap: "wrap" }}>
                       <Muted style={{ fontSize: 11 }}>
-                        {new Date(tx.created_at).toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(tx.created_at)}
                         {" · "}
-                        {new Date(tx.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {formatTime(tx.created_at)}
                       </Muted>
                       {statusInfo ? (
                         <View style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}>
