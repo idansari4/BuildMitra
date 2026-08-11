@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
@@ -37,8 +38,42 @@ export default function Home() {
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
   const [aiMatch, setAiMatch] = useState<{ summary: string; top_job_ids: string[] } | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [, setLocStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
 
   const isWorker = user?.role === "worker";
+
+  // Ask (silently) for the worker's location once — used to render an
+  // approximate "X km away" line on each vacancy card. If denied we
+  // simply hide the distance row instead of showing bogus data.
+  useEffect(() => {
+    if (!isWorker) return;
+    let cancelled = false;
+    (async () => {
+      setLocStatus("requesting");
+      try {
+        const perm = await Location.getForegroundPermissionsAsync();
+        let granted = perm.status === "granted";
+        if (!granted && perm.canAskAgain) {
+          const req = await Location.requestForegroundPermissionsAsync();
+          granted = req.status === "granted";
+        }
+        if (!granted) {
+          if (!cancelled) setLocStatus("denied");
+          return;
+        }
+        const pos = await Location.getLastKnownPositionAsync({});
+        const p = pos || (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+        if (!cancelled && p) {
+          setMyPos({ lat: p.coords.latitude, lng: p.coords.longitude });
+          setLocStatus("granted");
+        }
+      } catch {
+        if (!cancelled) setLocStatus("denied");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isWorker]);
 
   const load = useCallback(async () => {
     try {
@@ -148,6 +183,7 @@ export default function Home() {
               onOpen={() => router.push(`/job/${item.id}` as any)}
               onApply={() => applyNow(item)}
               applying={applyingKey === (item.vacancy_key || item.id)}
+              myPos={myPos}
             />
           ) : (
             <ClientJobCard item={item} onOpen={() => router.push(`/job/${item.id}` as any)} />
@@ -165,16 +201,22 @@ function WorkerVacancyCard({
   onOpen,
   onApply,
   applying,
+  myPos,
 }: {
   item: any;
   highlight?: boolean;
   onOpen: () => void;
   onApply: () => void;
   applying: boolean;
+  myPos: { lat: number; lng: number } | null;
 }) {
   const { t: tr } = useT();
   // Resolve wage — prefer per-skill wage from skills_required if present.
   const wageInfo = resolveWage(item);
+  const distanceKm =
+    myPos && typeof item.lat === "number" && typeof item.lng === "number"
+      ? haversineKm(myPos.lat, myPos.lng, item.lat, item.lng)
+      : null;
 
   return (
     <Pressable testID={`vacancy-${item.vacancy_key || item.id}`} onPress={onOpen}>
@@ -201,6 +243,13 @@ function WorkerVacancyCard({
         {/* Info rows */}
         <View style={{ marginTop: 10, gap: 6 }}>
           <InfoRow icon="location" label="Location" value={item.location || "-"} />
+          {distanceKm != null ? (
+            <InfoRow
+              icon="navigate"
+              label="Distance"
+              value={`${distanceKm.toFixed(1)} km away`}
+            />
+          ) : null}
           <InfoRow icon="build" label="Skill Required" value={item.skill || "-"} />
           {item.slot_skill ? (
             <InfoRow icon="ribbon" label="Skill Level" value={item.slot_skill} />
@@ -322,6 +371,18 @@ function ClientJobCard({ item, onOpen }: { item: any; onOpen: () => void }) {
 }
 
 /* ---------------- Wage helper ---------------- */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371; // km
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 function resolveWage(job: any): { display: string; type: "day" | "hour" | "unknown" } {
   // Prefer per-slot wage attached by the backend vacancies expander.
   if (job.slot_wage_type === "day" && job.slot_daily_wage) {
