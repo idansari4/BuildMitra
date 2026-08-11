@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { View, StyleSheet, Pressable, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
-import { colors, radius, spacing, type as t } from "@/src/theme";
+import { colors, radius, spacing, SKILLS, type as t } from "@/src/theme";
 import { Body, Card, Field, PrimaryButton } from "@/src/ui";
 import Dropdown from "@/src/components/dropdown";
 
@@ -56,8 +56,35 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
   const [city, setCity] = useState(user?.city || "");
   const [address, setAddress] = useState(user?.address || "");
   const [pin, setPin] = useState(user?.pin_code || "");
+  // Contractor Job Title — reuses the SAME shared SKILLS list as Worker Profile.
+  // Stored inside the user's `skills` array (skills[0] = primary trade), which
+  // means all existing UPI/AI-matching pipelines that read `skills` keep working.
+  const initialContractorSkill = user?.skills?.[0] || "";
+  const initialContractorSkillIsCustom =
+    !!initialContractorSkill && !SKILLS.includes(initialContractorSkill);
+  const [contractorJobTitle, setContractorJobTitle] = useState<string>(
+    initialContractorSkillIsCustom ? "Other" : initialContractorSkill
+  );
+  const [contractorCustomSkill, setContractorCustomSkill] = useState<string>(
+    initialContractorSkillIsCustom ? initialContractorSkill : ""
+  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+
+  // Re-hydrate when `user.skills` changes (login/refresh late-load)
+  useEffect(() => {
+    const s = user?.skills?.[0] || "";
+    if (!s) {
+      setContractorJobTitle("");
+      setContractorCustomSkill("");
+    } else if (SKILLS.includes(s)) {
+      setContractorJobTitle(s);
+      setContractorCustomSkill("");
+    } else {
+      setContractorJobTitle("Other");
+      setContractorCustomSkill(s);
+    }
+  }, [user?.skills]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -74,7 +101,7 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
     setBusy(true);
     setMsg("");
     try {
-      await api.updateMe({
+      const payload: any = {
         company_name: companyName,
         business_type: businessType || null,
         contact_person: contactPerson,
@@ -83,7 +110,17 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
         city,
         address,
         pin_code: pin,
-      });
+      };
+      // Contractor-only: persist Job Title into `skills` array. Uses the same
+      // standardized SKILLS list as Worker Profile; "Other" writes the custom text.
+      if (isContractor) {
+        const finalTitle =
+          contractorJobTitle === "Other" && contractorCustomSkill.trim()
+            ? contractorCustomSkill.trim()
+            : contractorJobTitle || "";
+        payload.skills = finalTitle ? [finalTitle] : [];
+      }
+      await api.updateMe(payload);
       await onSaved?.();
       await loadStats();
       setMsg("Saved ✓");
@@ -129,7 +166,33 @@ export default function ClientProfileBody({ user, onSaved, onNavigate }: Props) 
         testID="section-company-info"
       >
         <Field label="Business Name" value={companyName} onChangeText={setCompanyName} placeholder="e.g., ABC Construction" testID="field-company-name" />
-        {isContractor ? null : (
+        {isContractor ? (
+          <>
+            <Dropdown
+              testID="contractor-job-title"
+              label="Job Title"
+              required
+              value={contractorJobTitle}
+              options={SKILLS}
+              onSelect={(v) => {
+                setContractorJobTitle(v);
+                if (v !== "Other") setContractorCustomSkill("");
+              }}
+              placeholder="Select your primary trade"
+              searchable
+            />
+            {contractorJobTitle === "Other" ? (
+              <Field
+                testID="contractor-custom-skill"
+                label="Enter Job Title"
+                required
+                value={contractorCustomSkill}
+                onChangeText={setContractorCustomSkill}
+                placeholder="e.g., Steel Fabrication Contractor"
+              />
+            ) : null}
+          </>
+        ) : (
           <Dropdown
             testID="business-type-dd"
             label="Business Type"

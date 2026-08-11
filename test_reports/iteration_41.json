@@ -1,0 +1,26 @@
+{
+  "summary": "Iter 41 focused test — Contractor Profile 'Job Title' field addition — PASS. Verified all 5 review-request scenarios on mobile viewport 390x844 via Playwright + direct API. (1) Contractor sees a new 'Job Title *' searchable dropdown (testID `contractor-job-title`) inside the 'Contractor Information' section, with red required asterisk; SKILLS list populated (Carpenter, Other, etc.); business-type-dd correctly hidden. (2) Selecting 'Carpenter' → Save Profile shows 'Saved ✓', page reload pre-selects 'Carpenter' in the dropdown, and GET /api/me returns skills=['Carpenter'] (confirmed via direct curl). (3) Selecting 'Other' reveals `contractor-custom-skill` input, typing 'Steel Fabrication Contractor' + Save persists — after page reload dropdown re-hydrates as 'Other' AND the custom input pre-fills 'Steel Fabrication Contractor' (useEffect on user.skills mapping non-canonical → Other works correctly). (4) Reset: contractor final skills=['Carpenter'] confirmed via curl GET /api/me — clean state for subsequent runs. (5) Regression: Client profile (9000000001) does NOT show `contractor-job-title`, DOES show `business-type-dd`; PUT /api/me for client returns 200. Worker profile (9000000002) still renders its own Job Title (SKILLS) dropdown pre-selecting 'Marbal Mason' (screenshot confirmed) — Phase 1 Other flow untouched. No Post Job impact.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "Playwright inline script — see iteration output; screenshots /tmp/contractor_dd_open.png (dropdown open with SKILLS list) and worker_profile screenshot showing Marbal Mason pre-select"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "client-profile-body.tsx cleanly gates the new UI on `user.role === 'contractor'` (isContractor flag) and re-uses the shared SKILLS constant from /app/frontend/src/theme.ts — no duplicated skill list, single source of truth.",
+    "useEffect on user.skills correctly rehydrates the dropdown after refresh: canonical SKILLS value → same, non-canonical → 'Other' + custom prefill, empty → reset both. Verified live in reload tests.",
+    "Save payload writes `skills: [finalTitle]` when contractor and non-empty, else `[]` — matches spec skills[0]=<job title>. Existing PUT /api/me contract unchanged."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "seed_data_creation": "None. Contractor 9000000003 skill state ended as ['Carpenter'] (verified via GET /api/me) so next runs start clean.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Contractor Job Title dropdown is fully wired at /app/frontend/src/components/client-profile-body.tsx lines 169-194. testIDs: contractor-job-title (dropdown), contractor-job-title-search, contractor-job-title-opt-<name> (each option), contractor-job-title-backdrop, contractor-custom-skill (custom text input shown only when 'Other' selected). Value round-trips through user.skills[0]. Client role continues to see business-type-dd instead. Login flow: role-select screen requires clicking [data-testid=\"role-<contractor|worker|client>\"] then [data-testid=\"continue-button\"], then filling login-mobile/login-password (input is nested inside the testID wrapper — use `.locator([data-testid=X]).locator('input')`).",
+  "rca_of_issue": ""
+}
