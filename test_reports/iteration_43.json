@@ -1,0 +1,42 @@
+{
+  "summary": "Attendance Monitoring Contractor/Client fix validated end-to-end. Backend: 8/8 pytest (test_iter43_attendance_monitor.py) pass — enrichment schema (worker_name non-empty, job_title string, has_selfie boolean, raw selfie stripped) verified for both Client and Contractor; worker 403 unchanged; full E2E session flow (post job → apply → accept → check_in → check_out) succeeds and Client sees the enriched row with correct worker name, job_title, has_selfie=true; scoping regression verifies Contractor cannot see Client's job events; Admin /admin/attendance still returns all; Worker's /attendance/mine still works with selfie stripped and worker self check-in still succeeds. Frontend: MonitorAttendance renders session cards with correct testIDs (att-session-*, att-checkin-*, att-checkout-*, att-hours-*, att-status-*), worker name 'Ramesh Kumar' (not fallback), Check-in 11:21 PM, Check-out 11:21 PM, Hours 0.0h, GPS OK badge, Selfie Verified badge, Checked-out status pill. Worker's own attendance screen (Today card, Check-in/Out buttons, hours) renders correctly — no format regression. No React Native red screens; only pre-existing 'shadow*' style-prop deprecation warning (unrelated).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "MonitorAttendance", "issues": ["Minor UX: an ongoing (checked-in but never checked-out) session displays cumulative hours since check-in without any day cap — observed 1110.3h⟳ on a Mumbai job from 04-07-2026. Because sessions are grouped by YYYY-MM-DD but endMs = now for ongoing, an abandoned check-in from weeks ago accumulates unbounded hours. Consider clamping endMs to end-of-day for ongoing sessions older than today, or showing 'stale — no check-out' badge. Not blocking per spec (spec says ongoing hours = now - check_in)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter43_attendance_monitor.py",
+    "/app/test_reports/pytest/iter43_attendance_monitor.xml"
+  ],
+  "action_items": [
+    "(Optional UX polish) Cap ongoing session hours to end-of-day or flag stale ongoing sessions in MonitorAttendance — an abandoned check-in from a past day currently renders enormous ongoing hours like '1110.3h ⟳'.",
+    "(Optional cleanup) The class-scoped fixture in TestSessionFlow triggers a pytest 10 deprecation warning — safe to keep for now; migrate to @classmethod when moving to pytest 10."
+  ],
+  "critical_code_review_comments": [
+    "server.py my-workers (L1961): db.attendance.find with limit=days*20 — for days=1 that's a cap of 20 events, days=30 → 600. If a busy site has >20 check-ins today the Client may see truncated data. Consider a larger cap or exposing pagination.",
+    "server.py my-workers enrichment: worker_name fallback is 'Worker' if user record is missing — spec says worker_name is non-empty string (satisfied), but a soft-deleted user could still leak stale check-ins with 'Worker'. Acceptable.",
+    "attendance.tsx MonitorAttendance L619: sessions skip rows without both worker_id AND job_id (`if (!r.worker_id || !r.job_id) continue`). Rows with job_id='self' (worker generic self check-ins) would be excluded — this is correct for monitoring, just documenting.",
+    "attendance.tsx L634: For ongoing sessions endMs = now — see design_issue above about unbounded ongoing hours."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter43_attendance_monitor.py (new)",
+    "/app/test_reports/pytest/iter43_attendance_monitor.xml (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 pytest)",
+    "frontend": "100% (5/5 flows: client login, monitor screen loads, enriched session card renders w/ correct testIDs, hours/status/badges verified, worker attendance screen regression)"
+  },
+  "seed_data_creation": "Created 1 real job as client (title TEST_iter43_MonitorFlow_<ts>, lat=28.6139, lng=77.2090, radius=500m). Worker applied, client accepted, worker performed check_in + check_out — both events verified in DB via /attendance/my-workers. Data prefixed 'TEST_iter43' for cleanup. Additional generic 'self' worker check-in also created during worker-regression test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Monitor session testIDs pattern: att-session-{workerId}::{jobId}::YYYY-MM-DD, att-checkin-{key}, att-checkout-{key}, att-hours-{key}, att-status-{key}. `key` contains '::' which is a valid attribute value in CSS — playwright query works with the full `[data-testid=\"att-session-<key>\"]` selector. On the client monitor screen, the ongoing indicator is a trailing ' ⟳' character on the hours cell; absent when checked-out. Today filter chip = [data-testid=\"filter-1\"]. Login flow requires selecting a role first (I am a Worker/Contractor/Client) → Continue → login form; use `demo-worker` / `demo-client` / `demo-contractor` testIDs to auto-fill.",
+  "rca_of_issue": "N/A — no bugs found. All acceptance criteria from the review request met exactly. Only a minor UX observation about unbounded ongoing hours for abandoned check-ins is logged as optional polish."
+}

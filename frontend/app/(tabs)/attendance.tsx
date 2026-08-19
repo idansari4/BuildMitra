@@ -17,7 +17,7 @@ import { Image } from "expo-image";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { downloadExport } from "@/src/utils/download";
-import { formatDate, formatDateTime, formatTime } from "@/src/utils/date";
+import { formatDate, formatDateTime, formatTime, formatIsoDate } from "@/src/utils/date";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card, PrimaryButton, SecondaryButton, Chip } from "@/src/ui";
 
@@ -25,15 +25,38 @@ type AttRec = {
   id: string;
   worker_id?: string;
   worker_name?: string;
+  worker_photo?: string | null;
+  worker_mobile?: string | null;
   job_id?: string;
   job_title?: string | null;
+  job_location?: string | null;
   type: "check_in" | "check_out";
   lat?: number;
   lng?: number;
   face_verified?: boolean;
   within_geofence?: boolean;
+  has_selfie?: boolean;
   distance_from_site_m?: number | null;
   created_at: string;
+};
+
+/** Daily worker/job session — check-in + optional check-out + total hours. */
+type AttSession = {
+  key: string;
+  worker_id: string;
+  worker_name: string;
+  worker_photo: string | null;
+  job_id: string;
+  job_title: string;
+  job_location: string;
+  date: string; // YYYY-MM-DD (local)
+  check_in_at: string | null;
+  check_out_at: string | null;
+  hours: number; // total worked hours (ongoing if still checked-in)
+  ongoing: boolean;
+  within_geofence: boolean; // false if any event flagged
+  has_selfie: boolean; // true if any event had a selfie
+  events: AttRec[];
 };
 
 type SalaryRow = {
@@ -580,6 +603,77 @@ export function MonitorAttendance({ role }: { role: string }) {
     return { uniqueWorkers, verified, total, flagged };
   }, [rows]);
 
+  /**
+   * Aggregate raw check_in/check_out events into worker/job/day sessions using
+   * the SAME underlying attendance records (no duplicate source of truth).
+   * Total hours = (check_out - check_in) / 3600. When only check-in exists we
+   * report an "ongoing" session with hours accumulated up to now.
+   */
+  const sessions = useMemo<AttSession[]>(() => {
+    const dayKey = (iso: string) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
+    const grouped: Record<string, AttRec[]> = {};
+    for (const r of rows) {
+      if (!r.worker_id || !r.job_id) continue;
+      const key = `${r.worker_id}::${r.job_id}::${dayKey(r.created_at)}`;
+      (grouped[key] ||= []).push(r);
+    }
+    const now = Date.now();
+    const list: AttSession[] = Object.entries(grouped).map(([key, evts]) => {
+      // Sort ascending
+      const sorted = [...evts].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      const firstIn = sorted.find((e) => e.type === "check_in");
+      const lastOut = [...sorted].reverse().find((e) => e.type === "check_out");
+      const inMs = firstIn ? new Date(firstIn.created_at).getTime() : null;
+      const outMs = lastOut ? new Date(lastOut.created_at).getTime() : null;
+      const [w, j, dt] = key.split("::");
+      // Ongoing = checked-in but no check-out AND session is TODAY. Stale
+      // check-ins from previous days are auto-clamped to end-of-check-in-day
+      // so hours don't accumulate into hundreds.
+      const todayKey = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      })();
+      const isToday = dt === todayKey;
+      const ongoing = !!firstIn && !lastOut && isToday;
+      let endMs: number | null = null;
+      if (outMs) endMs = outMs;
+      else if (firstIn && isToday) endMs = now;
+      else if (firstIn && !isToday) {
+        // Stale: cap at 23:59:59 of the check-in day
+        const dEnd = new Date(firstIn.created_at);
+        dEnd.setHours(23, 59, 59, 999);
+        endMs = dEnd.getTime();
+      }
+      const hours = inMs && endMs ? Math.max(0, (endMs - inMs) / 3600000) : 0;
+      const any = sorted[0] || evts[0];
+      return {
+        key,
+        worker_id: w,
+        worker_name: any.worker_name || "Worker",
+        worker_photo: any.worker_photo || null,
+        job_id: j,
+        job_title: any.job_title || "",
+        job_location: any.job_location || "",
+        date: dt,
+        check_in_at: firstIn?.created_at || null,
+        check_out_at: lastOut?.created_at || null,
+        hours,
+        ongoing,
+        within_geofence: sorted.every((e) => e.within_geofence !== false),
+        has_selfie: sorted.some((e) => !!e.has_selfie),
+        events: sorted,
+      };
+    });
+    // Sort by date desc, then check_in desc for stable ordering
+    list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (a.check_in_at || "").localeCompare(b.check_in_at || "")));
+    return list;
+  }, [rows]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
@@ -658,7 +752,7 @@ export function MonitorAttendance({ role }: { role: string }) {
 
       {loading ? (
         <Card><ActivityIndicator color={colors.brand} /></Card>
-      ) : rows.length === 0 ? (
+      ) : sessions.length === 0 ? (
         <Card>
           <View style={{ alignItems: "center", padding: spacing.md }}>
             <Ionicons name="calendar-outline" size={40} color={colors.borderStrong} />
@@ -671,52 +765,116 @@ export function MonitorAttendance({ role }: { role: string }) {
           </View>
         </Card>
       ) : (
-        rows.map((r) => (
-          <Card key={r.id}>
-            <View style={styles.row}>
+        sessions.map((s) => (
+          <Card key={s.key} testID={`att-session-${s.key}`}>
+            {/* Row 1 — worker + job */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              {s.worker_photo ? (
+                <Image
+                  source={{ uri: s.worker_photo.startsWith("data:") ? s.worker_photo : `data:image/jpeg;base64,${s.worker_photo}` }}
+                  style={{ width: 40, height: 40, borderRadius: 20 }}
+                />
+              ) : (
+                <Ionicons name="person-circle" size={40} color={colors.brand} />
+              )}
               <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Ionicons name="person-circle" size={20} color={colors.brand} />
-                  <Body style={{ fontWeight: "800" }}>{r.worker_name || "Worker"}</Body>
-                </View>
-                <Muted style={{ marginTop: 3, fontSize: 12 }} numberOfLines={1}>
-                  {r.type === "check_in" ? "🟢 Checked in" : "🔴 Checked out"}
-                  {r.job_title ? ` · ${r.job_title}` : ""}
-                </Muted>
-                <Muted style={{ marginTop: 2, fontSize: 11 }}>
-                  {formatDateTime(r.created_at)}
-                </Muted>
+                <Body style={{ fontWeight: "800" }} numberOfLines={1}>{s.worker_name}</Body>
+                {s.job_title || s.job_location ? (
+                  <Muted style={{ marginTop: 2, fontSize: 12 }} numberOfLines={1}>
+                    {[s.job_title, s.job_location].filter(Boolean).join(" · ")}
+                  </Muted>
+                ) : null}
+                <Muted style={{ marginTop: 2, fontSize: 11 }}>{formatIsoDate(s.date)}</Muted>
               </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <View
+              <View
+                testID={`att-status-${s.key}`}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 999,
+                  backgroundColor: s.ongoing ? "#FEF3C7" : "#DCFCE7",
+                }}
+              >
+                <Body
                   style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 4,
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                    borderRadius: 999,
-                    backgroundColor: r.within_geofence === false ? "#FEE2E2" : "#DCFCE7",
+                    fontSize: 11,
+                    fontWeight: "800",
+                    color: s.ongoing ? "#B45309" : "#15803D",
                   }}
                 >
-                  <Ionicons
-                    name={r.within_geofence === false ? "warning" : "shield-checkmark"}
-                    size={12}
-                    color={r.within_geofence === false ? colors.error : colors.success}
-                  />
-                  <Body
-                    style={{
-                      fontSize: 11,
-                      color: r.within_geofence === false ? colors.error : colors.success,
-                      fontWeight: "700",
-                    }}
-                  >
-                    {r.within_geofence === false ? "Off-site" : "Verified"}
-                  </Body>
-                </View>
-                {r.distance_from_site_m != null ? (
-                  <Muted style={{ marginTop: 3, fontSize: 10 }}>{r.distance_from_site_m}m</Muted>
-                ) : null}
+                  {s.ongoing ? "Checked-in" : "Checked-out"}
+                </Body>
+              </View>
+            </View>
+
+            {/* Row 2 — Check-in, Check-out, Hours */}
+            <View style={styles.attTimingRow}>
+              <View style={styles.attTimingCell}>
+                <Muted style={styles.attTimingLabel}>Check-in</Muted>
+                <Body style={styles.attTimingValue} testID={`att-checkin-${s.key}`}>
+                  {s.check_in_at ? formatTime(s.check_in_at) : "—"}
+                </Body>
+              </View>
+              <View style={styles.attTimingCell}>
+                <Muted style={styles.attTimingLabel}>Check-out</Muted>
+                <Body style={styles.attTimingValue} testID={`att-checkout-${s.key}`}>
+                  {s.check_out_at ? formatTime(s.check_out_at) : "—"}
+                </Body>
+              </View>
+              <View style={styles.attTimingCell}>
+                <Muted style={styles.attTimingLabel}>Hours</Muted>
+                <Body
+                  style={[styles.attTimingValue, { color: colors.brand }]}
+                  testID={`att-hours-${s.key}`}
+                >
+                  {s.hours > 0 ? `${s.hours.toFixed(1)}h${s.ongoing ? " ⟳" : ""}` : "—"}
+                </Body>
+              </View>
+            </View>
+
+            {/* Row 3 — GPS / Selfie verification badges */}
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+              <View
+                style={[
+                  styles.attBadge,
+                  { backgroundColor: s.within_geofence ? "#DCFCE7" : "#FEE2E2" },
+                ]}
+              >
+                <Ionicons
+                  name={s.within_geofence ? "shield-checkmark" : "warning"}
+                  size={12}
+                  color={s.within_geofence ? colors.success : colors.error}
+                />
+                <Body
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: s.within_geofence ? colors.success : colors.error,
+                  }}
+                >
+                  GPS {s.within_geofence ? "OK" : "Off-site"}
+                </Body>
+              </View>
+              <View
+                style={[
+                  styles.attBadge,
+                  { backgroundColor: s.has_selfie ? "#DBEAFE" : "#F3F4F6" },
+                ]}
+              >
+                <Ionicons
+                  name={s.has_selfie ? "camera" : "camera-outline"}
+                  size={12}
+                  color={s.has_selfie ? "#1D4ED8" : colors.onSurfaceSecondary}
+                />
+                <Body
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: s.has_selfie ? "#1D4ED8" : colors.onSurfaceSecondary,
+                  }}
+                >
+                  Selfie {s.has_selfie ? "Verified" : "Missing"}
+                </Body>
               </View>
             </View>
           </Card>
@@ -821,5 +979,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.brandTertiary,
+  },
+  attTimingRow: {
+    flexDirection: "row",
+    marginTop: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
+    overflow: "hidden",
+  },
+  attTimingCell: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+  },
+  attTimingLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  attTimingValue: {
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 4,
+    color: colors.onSurface,
+  },
+  attBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
   },
 });

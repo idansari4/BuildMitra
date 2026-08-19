@@ -19,6 +19,7 @@ import { useT } from "@/src/i18n";
 import { colors, radius, spacing, SKILLS, type as t } from "@/src/theme";
 import { H2, Body, Muted, Chip, Card, PrimaryButton } from "@/src/ui";
 import { formatIsoDate } from "@/src/utils/date";
+import NotificationBell from "@/src/components/notification-bell";
 
 /**
  * v34 Worker Home — Vacancy System
@@ -120,13 +121,16 @@ export default function Home() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Muted>{tr("home.welcomeBack")}</Muted>
           <H2 testID="home-greeting">{tr("home.hi")}, {user?.name?.split(" ")[0]}</H2>
         </View>
-        <View style={styles.badge}>
-          <Ionicons name="location" size={14} color={colors.brand} />
-          <Body style={{ fontWeight: "700", fontSize: t.sm }}>{user?.city || "India"}</Body>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <NotificationBell />
+          <View style={styles.badge}>
+            <Ionicons name="location" size={14} color={colors.brand} />
+            <Body style={{ fontWeight: "700", fontSize: t.sm }}>{user?.city || "India"}</Body>
+          </View>
         </View>
       </View>
 

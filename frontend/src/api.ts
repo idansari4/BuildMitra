@@ -205,4 +205,17 @@ export const api = {
   // Payroll & AI
   payroll: (month?: string) => req("GET", `/payroll${month ? `?month=${month}` : ""}`),
   recommendWorkers: (jobId: string) => req("GET", `/ai/recommend-workers/${jobId}`),
+  // Notifications (in-app inbox)
+  notifications: (opts?: { unread_only?: boolean; limit?: number }) => {
+    const p = new URLSearchParams();
+    if (opts?.unread_only) p.set("unread_only", "true");
+    if (opts?.limit) p.set("limit", String(opts.limit));
+    const qs = p.toString();
+    return req("GET", `/notifications${qs ? "?" + qs : ""}`);
+  },
+  notificationsUnreadCount: () => req("GET", "/notifications/unread-count"),
+  notificationsMarkRead: (ids?: string[], all: boolean = false) =>
+    req("POST", "/notifications/mark-read", { ids: ids || null, all }),
+  notificationDelete: (id: string) => req("DELETE", `/notifications/${id}`),
+  notificationsClearAll: () => req("DELETE", "/notifications"),
 };

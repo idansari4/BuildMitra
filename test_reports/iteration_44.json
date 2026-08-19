@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 44 — Backend-only tests for In-app Notifications. Wrote /app/backend/tests/test_iter44_notifications.py with 24 tests covering all 5 REST endpoints, 9 auto-trigger flows, auth enforcement, cross-user isolation, and payload contents. Result: 24/24 PASSED. All notification triggers fire correctly, `unread_only` filter works, `mark-read all=true` is scoped to the current user, DELETE {id} of another user's notif returns 404, and the `data` payload contains the expected contextual IDs (job_id, application_id, worker_id, escrow_id, complaint_id, leave_id, etc.). One minor dead-code smell noted (unreachable duplicate block right after admin_reject_complaint at server.py:2671-2674) — not a functional bug.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/admin/complaints/{cid}/reject",
+        "issue": "Unreachable duplicate block at server.py lines 2671-2674 (after the function's return statement). Safe to delete — no functional impact but dead code."
+      },
+      {
+        "endpoint": "POST /api/admin/complaints/{cid}/resolve|reject",
+        "issue": "The `note` is accepted as a query parameter (not body). Works but non-idiomatic REST. Consider a small Pydantic body model for consistency."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter44_notifications.py",
+    "/app/test_reports/pytest/iter44_notifications.xml"
+  ],
+  "action_items": [
+    "Optional cleanup: remove unreachable duplicate block at /app/backend/server.py:2671-2674 after admin_reject_complaint's return.",
+    "Optional: switch admin complaint resolve/reject `note` from query param to a JSON body field for REST consistency."
+  ],
+  "critical_code_review_comments": [
+    "create_notification() correctly swallows exceptions so notif failures never break the parent business flow — good.",
+    "notify_admins() caps at 50 admins via to_list(length=50); acceptable for current scale.",
+    "All 9 trigger points confirmed live: application_new, application_accepted/rejected, attendance_check_in/check_out, complaint_new (fan-out to admins), complaint_resolved/rejected, wallet_credit (escrow release), leave_request, leave_approved/rejected, profile_verified, account_suspended, account_unsuspended.",
+    "Notifications correctly exclude Mongo `_id` via projection.",
+    "List endpoint clamps limit between 1..200 — safe against abuse."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter44_notifications.py (new)"
+  ],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "N/A (skipped as instructed)"},
+  "seed_data_creation": "Tests create ephemeral TEST_ jobs / applications / complaints / leaves / escrow via the API using the seeded demo accounts. Each test class clears its own user's notifications before running. teardown_module also clears all four demo accounts' notification inboxes at the end. No lingering test data in notifications collection.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Test file at /app/backend/tests/test_iter44_notifications.py can be re-run standalone: `pytest backend/tests/test_iter44_notifications.py -v`. It logs in with the seeded demo accounts (WORKER 9000000002, CLIENT 9000000001, CONTRACTOR 9000000003, ADMIN 9000000000). It uses a module-scoped autouse fixture to clear notifications first, and cross-test coupling exists via `pytest._notif_job` (job used across application + attendance + escrow + leave tests). Do not reorder classes without adjusting that. All 9 auto-trigger flows are exercised end-to-end and payload data fields are asserted.",
+  "rca_of_issue": "N/A — feature is working correctly."
+}

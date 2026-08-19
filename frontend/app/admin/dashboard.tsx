@@ -8,6 +8,7 @@ import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 
 type Stats = {
   total_workers: number; total_contractors: number; total_clients: number;
@@ -39,9 +40,12 @@ export default function Dashboard() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <LinearGradient colors={[colors.surfaceInverse, "#27272A"]} style={styles.hero}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Ionicons name="shield-checkmark" size={18} color={colors.brand} />
-            <Muted style={{ color: colors.surfaceTertiary, fontWeight: "700" }}>{tr("admin.console")}</Muted>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="shield-checkmark" size={18} color={colors.brand} />
+              <Muted style={{ color: colors.surfaceTertiary, fontWeight: "700" }}>{tr("admin.console")}</Muted>
+            </View>
+            <NotificationBell color={colors.onSurfaceInverse} />
           </View>
           <H1 style={{ color: colors.onSurfaceInverse, marginTop: 6 }} testID="admin-greeting">
             {tr("home.hi")} {user?.name?.split(" ")[0]}

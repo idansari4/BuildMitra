@@ -1233,6 +1233,14 @@ async def apply(body: ApplyIn, user=Depends(current_user)):
     }
     await db.applications.insert_one(appn)
     await db.jobs.update_one({"id": body.job_id}, {"$inc": {"applicants_count": 1}})
+    # Notify job poster of new application
+    await create_notification(
+        job.get("posted_by", ""),
+        "application_new",
+        "New job application",
+        f"{user['name']} applied for '{job['title']}'",
+        {"job_id": job["id"], "application_id": appn["id"], "worker_id": user["id"]},
+    )
     appn.pop("_id", None)
     return appn
 
@@ -1284,6 +1292,21 @@ async def update_application_status(app_id: str, body: ApplicationStatusIn, user
         await db.users.update_one(
             {"id": appn["worker_id"]},
             {"$set": {"available": False, "availability_auto_off_at": now_iso()}},
+        )
+    # Notify worker of application status change
+    if body.status in ("accepted", "rejected"):
+        _title = "Application accepted 🎉" if body.status == "accepted" else "Application not selected"
+        _body = (
+            f"You're hired for '{job['title']}'. Head to Attendance to check in."
+            if body.status == "accepted"
+            else f"Your application for '{job['title']}' was not selected this time."
+        )
+        await create_notification(
+            appn["worker_id"],
+            f"application_{body.status}",
+            _title,
+            _body,
+            {"job_id": appn["job_id"], "application_id": app_id},
         )
     return {"ok": True, "status": body.status}
 
@@ -1357,6 +1380,17 @@ async def attendance(body: AttendanceIn, user=Depends(current_user)):
         "created_at": now_iso(),
     }
     await db.attendance.insert_one(rec)
+    # Notify job poster of check-in / check-out
+    if job and job.get("posted_by"):
+        _label = "checked in" if body.type == "check_in" else "checked out"
+        _geo = "" if within else " (outside site radius)"
+        await create_notification(
+            job["posted_by"],
+            f"attendance_{body.type}",
+            f"{user['name']} {_label}",
+            f"For job '{job.get('title','')}'{_geo}",
+            {"job_id": body.job_id, "worker_id": user["id"], "attendance_id": rec["id"], "type": body.type},
+        )
     rec.pop("_id", None); rec.pop("selfie", None)
     return rec
 
@@ -1940,20 +1974,58 @@ async def payroll(month: Optional[str] = None, user=Depends(current_user)):
 # --- Client/Contractor attendance monitoring ---
 @api.get("/attendance/my-workers")
 async def attendance_my_workers(days: int = 30, user=Depends(current_user)):
-    """For client/contractor: list of attendance entries by workers on their jobs (last N days)."""
+    """For client/contractor: list of attendance entries by workers on their jobs (last N days).
+
+    Enriches each row with worker_name, worker_photo, job_title and has_selfie flag
+    by joining against the existing `users` and `jobs` collections — no new data
+    sources or schema changes. Selfie payload itself remains stripped from the
+    projection (only a boolean indicator is returned).
+    """
     if user["role"] not in ("client", "contractor", "admin"):
         raise HTTPException(403, "Not allowed")
     if user["role"] == "admin":
-        # Admin sees all recent attendance
         q: dict = {}
     else:
-        job_docs = await db.jobs.find({"posted_by": user["id"]}, {"_id": 0, "id": 1}).limit(500).to_list(length=500)
+        job_docs = await db.jobs.find({"posted_by": user["id"]}, {"_id": 0, "id": 1, "title": 1}).limit(500).to_list(length=500)
         job_ids = [j["id"] for j in job_docs]
         if not job_ids:
             return []
         q = {"job_id": {"$in": job_ids}}
-    cursor = db.attendance.find(q, {"_id": 0, "selfie": 0}).sort("created_at", -1).limit(days * 10)
-    return await cursor.to_list(length=days * 10)
+    # Fetch rows WITH selfie so we can derive has_selfie, then strip payload
+    cursor = db.attendance.find(q, {"_id": 0}).sort("created_at", -1).limit(days * 20)
+    rows = await cursor.to_list(length=days * 20)
+    if not rows:
+        return []
+
+    worker_ids = list({r.get("worker_id") for r in rows if r.get("worker_id")})
+    job_ids_needed = list({r.get("job_id") for r in rows if r.get("job_id")})
+    workers = {
+        u["id"]: u
+        async for u in db.users.find(
+            {"id": {"$in": worker_ids}},
+            {"_id": 0, "id": 1, "name": 1, "photo": 1, "mobile": 1},
+        )
+    }
+    jobs = {
+        j["id"]: j
+        async for j in db.jobs.find(
+            {"id": {"$in": job_ids_needed}},
+            {"_id": 0, "id": 1, "title": 1, "location": 1, "skill": 1},
+        )
+    }
+    out: list = []
+    for r in rows:
+        w = workers.get(r.get("worker_id") or "") or {}
+        j = jobs.get(r.get("job_id") or "") or {}
+        selfie = r.pop("selfie", None)
+        r["worker_name"] = w.get("name") or "Worker"
+        r["worker_photo"] = w.get("photo") or None
+        r["worker_mobile"] = w.get("mobile") or None
+        r["job_title"] = j.get("title") or ""
+        r["job_location"] = j.get("location") or ""
+        r["has_selfie"] = bool(selfie)
+        out.append(r)
+    return out
 
 # --- Attendance export: CSV / PDF (worker/client/contractor/admin) ---
 async def _attendance_rows_for_export(user: dict, days: int, scope: str) -> list:
@@ -2436,6 +2508,13 @@ async def file_complaint(body: ComplaintIn, user=Depends(current_user)):
         "created_at": now_iso(),
     }
     await db.complaints.insert_one(rec)
+    # Notify all admins
+    await notify_admins(
+        "complaint_new",
+        "New complaint filed",
+        f"{user['name']} ({user['role']}): {body.subject}",
+        {"complaint_id": rec["id"], "by_user_id": user["id"]},
+    )
     rec.pop("_id", None)
     return rec
 
@@ -2498,6 +2577,12 @@ async def admin_verify(user_id: str, _=Depends(admin_user)):
     res = await db.users.update_one({"id": user_id}, {"$set": {"aadhaar_verified": True}})
     if res.matched_count == 0:
         raise HTTPException(404, "User not found")
+    await create_notification(
+        user_id,
+        "profile_verified",
+        "Profile verified ✅",
+        "Your Aadhaar has been verified by BuildMitra admin. You'll now appear as a verified user.",
+    )
     return {"ok": True}
 
 @api.post("/admin/users/{user_id}/suspend")
@@ -2505,6 +2590,12 @@ async def admin_suspend(user_id: str, _=Depends(admin_user)):
     res = await db.users.update_one({"id": user_id}, {"$set": {"suspended": True, "available": False}})
     if res.matched_count == 0:
         raise HTTPException(404, "User not found")
+    await create_notification(
+        user_id,
+        "account_suspended",
+        "Account suspended",
+        "Your BuildMitra account has been suspended. Please contact support for details.",
+    )
     return {"ok": True}
 
 @api.post("/admin/users/{user_id}/unsuspend")
@@ -2512,6 +2603,12 @@ async def admin_unsuspend(user_id: str, _=Depends(admin_user)):
     res = await db.users.update_one({"id": user_id}, {"$set": {"suspended": False, "available": True}})
     if res.matched_count == 0:
         raise HTTPException(404, "User not found")
+    await create_notification(
+        user_id,
+        "account_unsuspended",
+        "Account reactivated ✅",
+        "Your BuildMitra account is active again. Welcome back!",
+    )
     return {"ok": True}
 
 @api.get("/admin/jobs")
@@ -2541,21 +2638,34 @@ async def admin_complaints(status: Optional[str] = None, _=Depends(admin_user)):
 
 @api.post("/admin/complaints/{cid}/resolve")
 async def admin_resolve_complaint(cid: str, note: Optional[str] = "", _=Depends(admin_user)):
+    comp = await db.complaints.find_one({"id": cid})
     res = await db.complaints.update_one({"id": cid}, {"$set": {"status": "resolved", "admin_note": note or ""}})
     if res.matched_count == 0:
         raise HTTPException(404, "Complaint not found")
+    if comp:
+        await create_notification(
+            comp.get("by_user_id", ""),
+            "complaint_resolved",
+            "Complaint resolved ✅",
+            f"Your complaint '{comp.get('subject','')}' has been marked resolved.",
+            {"complaint_id": cid, "admin_note": note or ""},
+        )
     return {"ok": True}
 
 @api.post("/admin/complaints/{cid}/reject")
 async def admin_reject_complaint(cid: str, note: Optional[str] = "", _=Depends(admin_user)):
+    comp = await db.complaints.find_one({"id": cid})
     res = await db.complaints.update_one({"id": cid}, {"$set": {"status": "rejected", "admin_note": note or ""}})
     if res.matched_count == 0:
         raise HTTPException(404, "Complaint not found")
-    return {"ok": True}
-
-    res = await db.complaints.update_one({"id": cid}, {"$set": {"status": "rejected", "admin_note": note or ""}})
-    if res.matched_count == 0:
-        raise HTTPException(404, "Complaint not found")
+    if comp:
+        await create_notification(
+            comp.get("by_user_id", ""),
+            "complaint_rejected",
+            "Complaint reviewed",
+            f"Your complaint '{comp.get('subject','')}' was reviewed and closed.",
+            {"complaint_id": cid, "admin_note": note or ""},
+        )
     return {"ok": True}
 
 # =====================================================================
@@ -2581,6 +2691,92 @@ async def log_activity(actor_id: str, actor_role: str, action: str, target_type:
         })
     except Exception as e:
         logger.debug("Activity log failed: %s", e)
+
+# ---------- Notifications (in-app inbox) ----------
+async def create_notification(user_id: str, ntype: str, title: str, body: str = "", data: Optional[dict] = None):
+    """Insert a notification for a user. Silent on failure."""
+    if not user_id:
+        return
+    try:
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "type": ntype,
+            "title": title[:200],
+            "body": (body or "")[:500],
+            "data": data or {},
+            "read": False,
+            "created_at": now_iso(),
+        })
+    except Exception as e:
+        logger.debug("Notification create failed: %s", e)
+
+
+async def notify_admins(ntype: str, title: str, body: str = "", data: Optional[dict] = None):
+    """Broadcast a notification to all admin users."""
+    try:
+        cur = db.users.find({"role": "admin"}, {"_id": 0, "id": 1})
+        admins = await cur.to_list(length=50)
+        for a in admins:
+            await create_notification(a["id"], ntype, title, body, data)
+    except Exception as e:
+        logger.debug("Notify admins failed: %s", e)
+
+
+@api.get("/notifications")
+async def list_notifications(
+    limit: int = 50,
+    unread_only: bool = False,
+    user=Depends(current_user),
+):
+    q: dict = {"user_id": user["id"]}
+    if unread_only:
+        q["read"] = False
+    cur = db.notifications.find(q, {"_id": 0}).sort("created_at", -1).limit(min(max(limit, 1), 200))
+    items = await cur.to_list(length=200)
+    return items
+
+
+@api.get("/notifications/unread-count")
+async def notifications_unread_count(user=Depends(current_user)):
+    n = await db.notifications.count_documents({"user_id": user["id"], "read": False})
+    return {"count": n}
+
+
+class MarkReadIn(BaseModel):
+    ids: Optional[List[str]] = None
+    all: Optional[bool] = False
+
+
+@api.post("/notifications/mark-read")
+async def notifications_mark_read(body: MarkReadIn, user=Depends(current_user)):
+    q: dict = {"user_id": user["id"]}
+    if body.all:
+        res = await db.notifications.update_many({**q, "read": False}, {"$set": {"read": True, "read_at": now_iso()}})
+        return {"ok": True, "modified": res.modified_count}
+    if body.ids:
+        res = await db.notifications.update_many(
+            {**q, "id": {"$in": body.ids}},
+            {"$set": {"read": True, "read_at": now_iso()}},
+        )
+        return {"ok": True, "modified": res.modified_count}
+    raise HTTPException(400, "Provide ids[] or all=true")
+
+
+@api.delete("/notifications/{nid}")
+async def notifications_delete(nid: str, user=Depends(current_user)):
+    res = await db.notifications.delete_one({"id": nid, "user_id": user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+
+@api.delete("/notifications")
+async def notifications_clear_all(user=Depends(current_user)):
+    """Delete ALL notifications for current user."""
+    res = await db.notifications.delete_many({"user_id": user["id"]})
+    return {"ok": True, "deleted": res.deleted_count}
+
 
 # ---------- Forgot Password ----------
 @api.post("/auth/forgot-password")
@@ -2698,6 +2894,14 @@ async def escrow_release(body: EscrowActionIn, user=Depends(current_user)):
     }
     await db.wallet_txns.insert_one(txn)
     await log_activity(user["id"], user["role"], "escrow_release", "escrow", esc["id"], {"worker_id": body.worker_id, "amount": body.amount})
+    # Notify worker of wallet credit
+    await create_notification(
+        body.worker_id,
+        "wallet_credit",
+        f"₹{int(body.amount)} credited to your wallet 💰",
+        f"Payment released for job '{esc.get('job_title','')}'.",
+        {"amount": float(body.amount), "job_id": esc.get("job_id"), "escrow_id": esc["id"]},
+    )
     return {"ok": True, "released": new_released, "status": new_status}
 
 @api.post("/escrow/refund")
@@ -2759,6 +2963,15 @@ async def leave_request(body: LeaveRequestIn, user=Depends(current_user)):
     }
     await db.leaves.insert_one(rec)
     await log_activity(user["id"], user["role"], "leave_request", "leave", rec["id"])
+    # Notify approver (contractor/client)
+    if approver_id:
+        await create_notification(
+            approver_id,
+            "leave_request",
+            f"Leave request from {user['name']}",
+            f"{body.from_date} → {body.to_date}. Reason: {rec['reason'][:80]}",
+            {"leave_id": rec["id"], "worker_id": user["id"], "job_id": body.job_id or ""},
+        )
     rec.pop("_id", None)
     return rec
 
@@ -2790,6 +3003,15 @@ async def leave_decision(leave_id: str, body: LeaveDecisionIn, user=Depends(curr
         {"$set": {"status": body.decision, "note": body.note or "", "decided_at": now_iso()}}
     )
     await log_activity(user["id"], user["role"], f"leave_{body.decision}", "leave", leave_id)
+    # Notify worker of decision
+    _ok = body.decision == "approved"
+    await create_notification(
+        rec.get("worker_id", ""),
+        f"leave_{body.decision}",
+        "Leave approved ✅" if _ok else "Leave rejected",
+        f"Your leave ({rec.get('from_date')} → {rec.get('to_date')}) has been {body.decision}.",
+        {"leave_id": leave_id, "decision": body.decision, "note": body.note or ""},
+    )
     return {"ok": True, "status": body.decision}
 
 # ---------- Site Progress Photos ----------
@@ -3166,6 +3388,11 @@ async def create_indexes():
 
         # Wallet
         await db.wallet_txns.create_index([("user_id", 1), ("created_at", -1)])
+
+        # Notifications (in-app inbox)
+        await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+        await db.notifications.create_index([("user_id", 1), ("read", 1)])
+        await db.notifications.create_index("id", unique=True)
 
         # Phase 2 collections
         await db.escrow.create_index("payer_id")
