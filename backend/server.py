@@ -2778,6 +2778,22 @@ async def notifications_clear_all(user=Depends(current_user)):
     return {"ok": True, "deleted": res.deleted_count}
 
 
+@api.post("/notifications/test")
+async def notifications_test(user=Depends(current_user)):
+    """Dev helper — insert a test notification for the current user so
+    UI badges/inbox can be verified quickly. Safe to keep enabled: it
+    only inserts a self-owned notification."""
+    await create_notification(
+        user["id"],
+        "test",
+        "🔔 Test notification",
+        f"Hello {user.get('name','')}, your notification bell is working correctly.",
+        {"source": "test-endpoint"},
+    )
+    n = await db.notifications.count_documents({"user_id": user["id"], "read": False})
+    return {"ok": True, "unread_count": n}
+
+
 # ---------- Forgot Password ----------
 @api.post("/auth/forgot-password")
 async def forgot_password(body: ForgotPasswordIn, request: Request):

@@ -8,21 +8,23 @@ import React, {
   useState,
 } from "react";
 import { AppState } from "react-native";
+import { usePathname } from "expo-router";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 
 /**
  * Global Notifications Context
  *
- * A single source of truth for the unread notification count across
- * the whole app. Any bell/badge rendered anywhere shares the same value
- * so a mark-read from one screen instantly updates every visible bell.
+ * A single source of truth for the unread notification count across the
+ * whole app. Every bell/badge rendered anywhere reads the same value so
+ * a mark-read from one screen instantly updates every visible bell.
  *
- * - Polls unread-count every 15s while user is logged in.
- * - Also refreshes on AppState "active" (screen wake / app resume).
- * - Exposes `refresh()` for imperative refresh after events
- *   (e.g. after opening the inbox / marking read).
- * - Provides `setUnread(n)` for optimistic UI updates.
+ * - Polls unread-count every 10s while a user is logged in.
+ * - Refreshes on AppState → "active" (screen wake / app resume).
+ * - Refreshes when the current route/pathname changes (tab switch etc).
+ * - Exposes `refresh()` for imperative refresh after events.
+ * - Provides `setUnread(n)` for optimistic UI updates from actions
+ *   (e.g. mark-read / delete inside the inbox screen).
  */
 
 type Ctx = {
@@ -39,10 +41,11 @@ const NotificationsCtx = createContext<Ctx>({
   setUnread: () => {},
 });
 
-const POLL_MS = 15000; // 15s
+const POLL_MS = 10000; // 10s — snappier than default 45s
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const pathname = usePathname();
   const [unread, setUnreadState] = useState(0);
   const [loading, setLoading] = useState(false);
   const timer = useRef<any>(null);
@@ -77,7 +80,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       setUnreadState(0);
       return;
     }
-    // Immediate load
+    // Immediate load on login
     refresh();
     // Poll
     timer.current = setInterval(refresh, POLL_MS);
@@ -96,6 +99,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     });
     return () => sub.remove();
   }, [refresh]);
+
+  // Route change → refresh (covers tab switches, deep-link navigation, etc.)
+  useEffect(() => {
+    if (user) refresh();
+    // Deliberately depend on pathname only for route-triggered refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const setUnread = useCallback((n: number | ((prev: number) => number)) => {
     if (typeof n === "function") {
