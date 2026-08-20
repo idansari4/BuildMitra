@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card, Chip } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 
 const FILTERS = [
   { id: "open", label: "Open" },
@@ -44,7 +45,10 @@ export default function AdminComplaints() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm }}>
-        <H2 testID="admin-complaints-title">Complaints</H2>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <H2 testID="admin-complaints-title" style={{ flex: 1 }}>Complaints</H2>
+          <NotificationBell />
+        </View>
         <Muted style={{ marginTop: 4 }}>Review and act on user reports</Muted>
       </View>
       <ScrollView

@@ -26,6 +26,7 @@ import {
   type as t,
 } from "@/src/theme";
 import { H2, Body, Muted, PrimaryButton, Field } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 import Dropdown from "@/src/components/dropdown";
 import DatePickerField from "@/src/components/date-picker-field";
 
@@ -439,7 +440,10 @@ export default function PostJob() {
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 140 }}
           keyboardShouldPersistTaps="handled"
         >
-          <H2 testID="post-job-title">Post a Job</H2>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <H2 testID="post-job-title" style={{ flex: 1 }}>Post a Job</H2>
+            <NotificationBell />
+          </View>
           <Muted style={{ marginTop: 4, marginBottom: spacing.md }}>
             Reach 1000+ workers nearby
           </Muted>

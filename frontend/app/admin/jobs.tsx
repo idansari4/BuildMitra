@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 
 export default function AdminJobs() {
   const [jobs, setJobs] = useState<any[]>([]);
@@ -32,7 +33,10 @@ export default function AdminJobs() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm }}>
-        <H2 testID="admin-jobs-title">Job Monitoring</H2>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <H2 testID="admin-jobs-title" style={{ flex: 1 }}>Job Monitoring</H2>
+          <NotificationBell />
+        </View>
         <Muted style={{ marginTop: 4 }}>All postings across the platform</Muted>
       </View>
       {toast ? <Body style={{ paddingHorizontal: spacing.md, marginTop: 8, color: toast.includes("✓") ? colors.success : colors.error }}>{toast}</Body> : null}

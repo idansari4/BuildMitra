@@ -7,6 +7,7 @@ import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card, SecondaryButton, Chip } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 
 export default function AdminProfile() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function AdminProfile() {
             <H1 style={{ fontSize: t.xl }} testID="admin-name">{user?.name}</H1>
             <Muted>ADMIN · {user?.mobile}</Muted>
           </View>
+          <NotificationBell />
         </View>
 
         <H2>{tr("admin.about")}</H2>

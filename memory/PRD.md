@@ -33,7 +33,7 @@ Uber/Ola-style marketplace for India's construction workforce connecting Workers
 - POST/GET /complaints, GET /complaints/mine
 - **Admin (require role=admin):** GET /admin/stats, /admin/users, /admin/jobs, /admin/attendance, /admin/complaints; POST /admin/users/{id}/verify, /suspend, /unsuspend; /admin/jobs/{id}/close; /admin/complaints/{id}/resolve, /reject
 - **ERP (require role=contractor):** GET /erp/dashboard; CRUD /erp/materials, /erp/tools, /erp/estimates, /erp/bills; POST /erp/bills/{id}/mark-paid
-- **Notifications:** GET /notifications, GET /notifications/unread-count, POST /notifications/mark-read, DELETE /notifications/{id}, DELETE /notifications. Auto-fires on: application new/accepted/rejected, attendance check-in/out, complaint filed/resolved/rejected, escrow release (wallet credit), leave request/approved/rejected, admin verify/suspend/unsuspend.
+- **Notifications:** GET /notifications, GET /notifications/unread-count, POST /notifications/mark-read, DELETE /notifications/{id}, DELETE /notifications. Auto-fires on: application new/accepted/rejected, attendance check-in/out, complaint filed/resolved/rejected, escrow release (wallet credit), leave request/approved/rejected, admin verify/suspend/unsuspend. Global `NotificationsProvider` context polls unread-count every 15s + on AppState active + on user login; renders bright red (#FF0000) badge with count on bell icon across ALL primary screens (Home, Profile, Attendance, Wallet, Post, Activity, ERP, Admin Dashboard/Users/Jobs/Complaints/Monitor/Attendance/Profile).
 
 ## Roadmap (deferred from full spec)
 - Real OTP via Twilio SMS, Aadhaar verification API, Stripe/Razorpay UPI payments

@@ -21,6 +21,7 @@ import { formatDate, formatTime } from "@/src/utils/date";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card, PrimaryButton, SecondaryButton, Field, Chip } from "@/src/ui";
 import { PaymentSheet } from "@/src/payment-sheet";
+import NotificationBell from "@/src/components/notification-bell";
 
 const BADGES = [
   { id: "bronze", title: "Bronze", min: 0, color: "#CD7F32", icon: "medal-outline" },
@@ -222,7 +223,10 @@ export default function Wallet() {
         contentContainerStyle={{ padding: spacing.md, paddingBottom: 80, gap: spacing.md }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
       >
-        <H2 testID="wallet-title">Wallet & Referrals</H2>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <H2 testID="wallet-title" style={{ flex: 1 }}>Wallet & Referrals</H2>
+          <NotificationBell />
+        </View>
 
         {/* Hero balance card */}
         <LinearGradient colors={[colors.brand, "#D97706"]} style={styles.hero}>

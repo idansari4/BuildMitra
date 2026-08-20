@@ -14,6 +14,7 @@ import { useRouter } from "expo-router";
 import { api } from "@/src/api";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, Body, Muted, Card } from "@/src/ui";
+import { useNotifications } from "@/src/notifications-context";
 
 /**
  * In-app Notifications Inbox
@@ -86,6 +87,7 @@ function routeFor(n: Notif): { pathname: string; params?: any } | null {
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { setUnread, refresh: refreshCtx } = useNotifications();
   const [items, setItems] = useState<Notif[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,13 +96,16 @@ export default function NotificationsScreen() {
     try {
       const r = (await api.notifications({ limit: 100 })) as Notif[];
       setItems(Array.isArray(r) ? r : []);
+      // Keep global badge in sync with the freshly loaded list
+      const u = (Array.isArray(r) ? r : []).filter((x) => !x.read).length;
+      setUnread(u);
     } catch (e: any) {
       Alert.alert("Failed to load", e?.message || "Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [setUnread]);
 
   useEffect(() => {
     load();
@@ -115,9 +120,13 @@ export default function NotificationsScreen() {
     // Optimistic mark-read
     if (!n.read) {
       setItems((arr) => arr.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+      setUnread((u) => u - 1);
       try {
         await api.notificationsMarkRead([n.id]);
-      } catch {}
+      } catch {
+        // Rollback on failure
+        refreshCtx();
+      }
     }
     const r = routeFor(n);
     if (r) router.push(r as any);
@@ -130,7 +139,9 @@ export default function NotificationsScreen() {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
+          const wasUnread = !n.read;
           setItems((arr) => arr.filter((x) => x.id !== n.id));
+          if (wasUnread) setUnread((u) => u - 1);
           try {
             await api.notificationDelete(n.id);
           } catch (e: any) {
@@ -145,10 +156,12 @@ export default function NotificationsScreen() {
   const markAllRead = async () => {
     if (!items.some((x) => !x.read)) return;
     setItems((arr) => arr.map((x) => ({ ...x, read: true })));
+    setUnread(0);
     try {
       await api.notificationsMarkRead(undefined, true);
     } catch (e: any) {
       Alert.alert("Failed", e?.message || "");
+      refreshCtx();
       load();
     }
   };
@@ -162,10 +175,12 @@ export default function NotificationsScreen() {
         style: "destructive",
         onPress: async () => {
           setItems([]);
+          setUnread(0);
           try {
             await api.notificationsClearAll();
           } catch (e: any) {
             Alert.alert("Failed", e?.message || "");
+            refreshCtx();
             load();
           }
         },

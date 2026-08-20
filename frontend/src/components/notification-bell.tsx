@@ -1,59 +1,38 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Pressable, StyleSheet, AppState } from "react-native";
+import React from "react";
+import { View, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter } from "expo-router";
 import { colors } from "@/src/theme";
 import { Body } from "@/src/ui";
-import { api } from "@/src/api";
+import { useNotifications } from "@/src/notifications-context";
 import { useAuth } from "@/src/auth";
 
 /**
- * NotificationBell — small header icon with unread count badge.
- * Polls unread count every 45s while screen focused; also refreshes
- * when the app comes back to the foreground.
+ * NotificationBell — header icon with an absolutely positioned red
+ * unread badge (#FF0000) in the top-right corner. All bells across
+ * the app share the same context, so any mark-read anywhere updates
+ * every rendered bell instantly.
  */
-export default function NotificationBell({ color = colors.onSurface }: { color?: string }) {
+type Props = {
+  color?: string;
+  /** If true, hides the count and shows only a dot. */
+  dotOnly?: boolean;
+  size?: number;
+};
+
+export default function NotificationBell({
+  color = colors.onSurface,
+  dotOnly = false,
+  size = 24,
+}: Props) {
   const router = useRouter();
   const { user } = useAuth();
-  const [count, setCount] = useState(0);
-  const timer = useRef<any>(null);
-
-  const load = useCallback(async () => {
-    if (!user) return;
-    try {
-      const r: any = await api.notificationsUnreadCount();
-      setCount(Number(r?.count || 0));
-    } catch {
-      // silent — badge simply stays at previous value
-    }
-  }, [user]);
-
-  // Poll while focused
-  useFocusEffect(
-    useCallback(() => {
-      load();
-      timer.current && clearInterval(timer.current);
-      timer.current = setInterval(load, 45000);
-      return () => {
-        if (timer.current) {
-          clearInterval(timer.current);
-          timer.current = null;
-        }
-      };
-    }, [load])
-  );
-
-  // Refresh on foreground
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") load();
-    });
-    return () => sub.remove();
-  }, [load]);
+  const { unread } = useNotifications();
 
   if (!user) return null;
 
-  const shown = count > 99 ? "99+" : String(count);
+  const hasUnread = unread > 0;
+  const shown = unread > 99 ? "99+" : String(unread);
 
   return (
     <Pressable
@@ -61,16 +40,28 @@ export default function NotificationBell({ color = colors.onSurface }: { color?:
       onPress={() => router.push("/notifications")}
       hitSlop={10}
       style={styles.wrap}
+      accessibilityLabel={hasUnread ? `${unread} unread notifications` : "Notifications"}
+      accessibilityRole="button"
     >
-      <Ionicons name="notifications-outline" size={24} color={color} />
-      {count > 0 && (
-        <View style={styles.badge}>
-          <Body style={styles.badgeTxt}>{shown}</Body>
-        </View>
+      <Ionicons
+        name={hasUnread ? "notifications" : "notifications-outline"}
+        size={size}
+        color={color}
+      />
+      {hasUnread && (
+        dotOnly ? (
+          <View style={styles.dot} />
+        ) : (
+          <View style={styles.badge}>
+            <Body style={styles.badgeTxt}>{shown}</Body>
+          </View>
+        )
       )}
     </Pressable>
   );
 }
+
+const RED = "#FF0000";
 
 const styles = StyleSheet.create({
   wrap: {
@@ -82,22 +73,44 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    top: 4,
-    right: 4,
+    top: 2,
+    right: 2,
     minWidth: 18,
     height: 18,
     paddingHorizontal: 4,
     borderRadius: 9,
-    backgroundColor: colors.error,
+    backgroundColor: RED,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: colors.surface,
+    // Subtle elevation for Android + shadow for iOS so the dot pops
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
   },
   badgeTxt: {
-    color: colors.onError,
+    color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "800",
     lineHeight: 12,
+  },
+  dot: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: RED,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
   },
 });

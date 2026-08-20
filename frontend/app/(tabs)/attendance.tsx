@@ -20,6 +20,7 @@ import { downloadExport } from "@/src/utils/download";
 import { formatDate, formatDateTime, formatTime, formatIsoDate } from "@/src/utils/date";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card, PrimaryButton, SecondaryButton, Chip } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 
 type AttRec = {
   id: string;
@@ -292,7 +293,10 @@ function WorkerAttendance() {
       contentContainerStyle={{ padding: spacing.md, paddingBottom: 100, gap: spacing.md }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
     >
-      <H2 testID="attendance-title">Attendance</H2>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <H2 testID="attendance-title" style={{ flex: 1 }}>Attendance</H2>
+        <NotificationBell />
+      </View>
       <Muted>GPS + Selfie verification keeps every check-in secure.</Muted>
 
       {/* Leave quick link */}
@@ -685,7 +689,10 @@ export function MonitorAttendance({ role }: { role: string }) {
       contentContainerStyle={{ padding: spacing.md, paddingBottom: 80, gap: spacing.md }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
     >
-      <H2 testID="attendance-title">Workforce Attendance</H2>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <H2 testID="attendance-title" style={{ flex: 1 }}>Workforce Attendance</H2>
+        <NotificationBell />
+      </View>
       <Muted>Track workers checking in on your jobs in real time.</Muted>
 
       {/* Leave inbox link for approvers */}

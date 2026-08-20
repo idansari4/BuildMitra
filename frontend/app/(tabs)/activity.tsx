@@ -7,6 +7,7 @@ import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 
 export default function Activity() {
   const router = useRouter();
@@ -32,7 +33,8 @@ export default function Activity() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={styles.header}>
-        <H2 testID="activity-title">{isWorker ? "My Applications" : "My Posted Jobs"}</H2>
+        <H2 testID="activity-title" style={{ flex: 1 }}>{isWorker ? "My Applications" : "My Posted Jobs"}</H2>
+        <NotificationBell />
       </View>
       <FlatList
         data={items}
@@ -123,7 +125,7 @@ export default function Activity() {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.sm },
+  header: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.sm, flexDirection: "row", alignItems: "center" },
   statusTag: { backgroundColor: colors.brandSecondary, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
   tagInfo: { backgroundColor: colors.surfaceSecondary, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
 });

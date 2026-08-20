@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth";
 import { I18nProvider } from "@/src/i18n";
+import { NotificationsProvider } from "@/src/notifications-context";
 
 LogBox.ignoreAllLogs(true);
 
@@ -31,8 +32,10 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <I18nProvider>
           <AuthProvider>
-            <StatusBar barStyle="dark-content" />
-            <Stack screenOptions={{ headerShown: false }} />
+            <NotificationsProvider>
+              <StatusBar barStyle="dark-content" />
+              <Stack screenOptions={{ headerShown: false }} />
+            </NotificationsProvider>
           </AuthProvider>
         </I18nProvider>
       </SafeAreaProvider>

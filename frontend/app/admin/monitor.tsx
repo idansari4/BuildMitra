@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import { api } from "@/src/api";
 import { colors, spacing, radius } from "@/src/theme";
 import { H2, Body, Muted, Card } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 
 export default function AdminMonitor() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function AdminMonitor() {
           <Ionicons name="arrow-back" size={26} color={colors.onSurface} />
         </Pressable>
         <H2>Admin Monitor</H2>
-        <View style={{ width: 40 }} />
+        <NotificationBell />
       </View>
       {loading ? (
         <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.brand} /></View>

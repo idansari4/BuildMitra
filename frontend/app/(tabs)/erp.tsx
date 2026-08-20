@@ -9,6 +9,7 @@ import { useAuth } from "@/src/auth";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card } from "@/src/ui";
 import { PaymentSheet } from "@/src/payment-sheet";
+import NotificationBell from "@/src/components/notification-bell";
 
 const MODULES = [
   { id: "materials", title: "Materials", icon: "cube", color: "#F59E0B", path: "/erp/materials" },
@@ -39,9 +40,12 @@ export default function ErpHub() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <LinearGradient colors={[colors.surfaceInverse, "#27272A"]} style={styles.hero}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Ionicons name="business" size={18} color={colors.brand} />
-            <Muted style={{ color: colors.surfaceTertiary, fontWeight: "700" }}>CONTRACTOR ERP</Muted>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="business" size={18} color={colors.brand} />
+              <Muted style={{ color: colors.surfaceTertiary, fontWeight: "700" }}>CONTRACTOR ERP</Muted>
+            </View>
+            <NotificationBell color={colors.onSurfaceInverse} />
           </View>
           <H1 style={{ color: colors.onSurfaceInverse, marginTop: 6 }} testID="erp-hero">
             {user?.company_name || user?.name}

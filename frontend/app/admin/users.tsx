@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
 import { colors, radius, spacing, type as t } from "@/src/theme";
 import { H2, Body, Muted, Card, Chip } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 
 const ROLES = [
   { id: "", label: "All" },
@@ -46,7 +47,10 @@ export default function AdminUsers() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm }}>
-        <H2 testID="admin-users-title">User Management</H2>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <H2 testID="admin-users-title" style={{ flex: 1 }}>User Management</H2>
+          <NotificationBell />
+        </View>
         <View style={styles.search}>
           <Ionicons name="search" size={18} color={colors.onSurfaceSecondary} />
           <TextInput

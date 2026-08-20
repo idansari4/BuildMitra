@@ -9,6 +9,7 @@ import { useAuth } from "@/src/auth";
 import { useT } from "@/src/i18n";
 import { colors, radius, spacing, SKILLS, EXPERIENCE_LEVELS, normalizeExperienceLevel, type as t } from "@/src/theme";
 import { H1, H2, Body, Muted, Card, Chip, PrimaryButton, Field } from "@/src/ui";
+import NotificationBell from "@/src/components/notification-bell";
 import ClientProfileBody from "@/src/components/client-profile-body";
 import SettingsMenu from "@/src/components/settings-menu";
 import Dropdown from "@/src/components/dropdown";
@@ -385,9 +386,10 @@ export default function Profile() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 100, gap: spacing.md }}>
-        {/* Top-right hamburger menu */}
+        {/* Top-right hamburger menu + Notifications */}
         <View style={styles.topBar}>
           <View style={{ flex: 1 }} />
+          <NotificationBell />
           <Pressable testID="hamburger-menu" onPress={() => setMenuOpen(true)} style={styles.hamburgerBtn}>
             <Ionicons name="menu" size={26} color={colors.onSurface} />
           </Pressable>
